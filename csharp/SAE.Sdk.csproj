@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    
+    <!-- NuGet Metadata -->
+    <PackageId>CR.SAE.SDK</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>EskenderDev</Authors>
+    <Company>EskenderDev</Company>
+    <Description>SDK C# para interactuar con la API de Hacienda Costa Rica (SAE System). Soporta REST y tiempo real vía SignalR.</Description>
+    <PackageProjectUrl>https://github.com/EskenderDev/SAE_SDKs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/EskenderDev/SAE_SDKs</RepositoryUrl>
+    <PackageTags>hacienda;costarica;factura-electronica;sae;sdk;signalr</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.3" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" Condition="'$(TargetFramework)' == 'net9.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>

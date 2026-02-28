@@ -1,0 +1,14 @@
+{
+  "name": "sae-sdks",
+  "private": true,
+  "description": "Monorepo de SDKs para la plataforma SAE",
+  "workspaces": [
+    "typescript"
+  ],
+  "scripts": {
+    "build:ts": "npm run build --workspace=typescript",
+    "test:ts": "npm run test --workspace=typescript",
+    "publish:ts": "npm publish --workspace=typescript"
+  },
+  "devDependencies": {}
+}
