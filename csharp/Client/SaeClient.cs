@@ -770,4 +770,201 @@ public class SaeClient : IAsyncDisposable
         }
         _http.Dispose();
     }
+
+    #region License Addons
+
+    /// <summary>
+    /// Obtiene el catálogo de paquetes de licencias disponibles para el tenant.
+    /// </summary>
+    public async Task<List<T>> GetAddonPackagesAsync<T>()
+    {
+        var response = await _http.GetAsync("v1/LicenseAddon/packages");
+        return await HandleResponseAsync<List<T>>(response);
+    }
+
+    /// <summary>
+    /// Compra un paquete de licencias addon directamente.
+    /// </summary>
+    public async Task<T> PurchaseAddonAsync<T>(Guid packageId)
+    {
+        var response = await _http.PostAsJsonAsync("v1/LicenseAddon/purchase", new { packageId });
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Obtiene todos los addons activos del tenant.
+    /// </summary>
+    public async Task<List<T>> GetTenantAddonsAsync<T>()
+    {
+        var response = await _http.GetAsync("v1/LicenseAddon");
+        return await HandleResponseAsync<List<T>>(response);
+    }
+
+    /// <summary>
+    /// Obtiene el resumen de facturación del tenant incluyendo addons.
+    /// </summary>
+    public async Task<T> GetBillingSummaryAsync<T>()
+    {
+        var response = await _http.GetAsync("v1/LicenseAddon/billing-summary");
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Reporta la compra de un addon por SINPE o transferencia (espera aprobación admin).
+    /// </summary>
+    public async Task<T> ReportAddonPurchaseAsync<T>(Guid packageId, string reference, string paymentMethod, decimal amount)
+    {
+        var response = await _http.PostAsJsonAsync("v1/LicenseAddon/report", new { packageId, reference, paymentMethod, amount });
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Cancela un addon activo.
+    /// </summary>
+    public async Task CancelAddonAsync(Guid addonId)
+    {
+        var response = await _http.PostAsync($"v1/LicenseAddon/{addonId}/cancel", null);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error cancelando addon: {response.StatusCode} - {error}");
+        }
+    }
+
+    #endregion
+
+    #region Reports
+
+    /// <summary>
+    /// Obtiene el reporte de IVA (D-104) para un período.
+    /// </summary>
+    public async Task<T> GetReporteIvaAsync<T>(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/iva?mes={mes}&anio={anio}", ct);
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Obtiene el libro de ventas detallado para un período.
+    /// </summary>
+    public async Task<T> GetLibroVentasAsync<T>(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/libro-ventas?mes={mes}&anio={anio}", ct);
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Obtiene el reporte de compras (crédito fiscal) para un período.
+    /// </summary>
+    public async Task<T> GetReporteComprasAsync<T>(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/compras?mes={mes}&anio={anio}", ct);
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Obtiene el reporte CABYS para un período.
+    /// </summary>
+    public async Task<T> GetReporteCabysAsync<T>(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/cabys?mes={mes}&anio={anio}", ct);
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Obtiene el asiento contable para un período.
+    /// </summary>
+    public async Task<T> GetAsientoContableAsync<T>(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/asiento?mes={mes}&anio={anio}", ct);
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Obtiene el reporte de extemporaneidad (documentos tardíos) para un período.
+    /// </summary>
+    public async Task<T> GetReporteExtemporaneidadAsync<T>(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/extemporaneidad?mes={mes}&anio={anio}", ct);
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Descarga el PDF del reporte de IVA (D-104).
+    /// </summary>
+    public async Task<byte[]> GetReporteIvaPdfAsync(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/iva/pdf?mes={mes}&anio={anio}", ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    /// <summary>
+    /// Descarga el Excel del libro de ventas.
+    /// </summary>
+    public async Task<byte[]> GetLibroVentasExcelAsync(int mes, int anio, CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync($"v1/reports/libro-ventas/excel?mes={mes}&anio={anio}", ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    #endregion
+
+    #region Tenant Users
+
+    /// <summary>
+    /// Obtiene todos los usuarios del tenant actual.
+    /// </summary>
+    public async Task<List<T>> GetTenantUsersAsync<T>()
+    {
+        var response = await _http.GetAsync("v1/tenant-users");
+        return await HandleResponseAsync<List<T>>(response);
+    }
+
+    /// <summary>
+    /// Invita a un usuario al tenant. Recibe email, role y opcionalmente customRoleId y branchId.
+    /// </summary>
+    public async Task<T> InviteTenantUserAsync<T>(string email, string role, Guid? customRoleId = null, Guid? branchId = null)
+    {
+        var response = await _http.PostAsJsonAsync("v1/tenant-users/invite", new { email, role, customRoleId, branchId });
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Acepta una invitación a un tenant usando el token recibido por correo (no requiere auth).
+    /// </summary>
+    public async Task<T> AcceptTenantInvitationAsync<T>(string token, string password, string fullName)
+    {
+        var response = await _http.PostAsJsonAsync("v1/tenant-users/accept-invite", new { token, password, fullName });
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Elimina un usuario del tenant.
+    /// </summary>
+    public async Task RemoveTenantUserAsync(Guid userId)
+    {
+        var response = await _http.DeleteAsync($"v1/tenant-users/{userId}");
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error removiendo usuario: {response.StatusCode} - {error}");
+        }
+    }
+
+    /// <summary>
+    /// Actualiza el rol de un usuario dentro del tenant.
+    /// </summary>
+    public async Task UpdateTenantUserRoleAsync(Guid userId, string role, Guid? customRoleId = null)
+    {
+        var response = await _http.PutAsJsonAsync($"v1/tenant-users/{userId}/role", new { role, customRoleId });
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error actualizando rol: {response.StatusCode} - {error}");
+        }
+    }
+
+    #endregion
 }
