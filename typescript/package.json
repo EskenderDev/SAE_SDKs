@@ -1,12 +1,12 @@
 {
     "name": "sae-ts-sdk",
-    "version": "0.1.0",
+    "version": "0.2.0",
+    "type": "module",
     "description": "TypeScript/JavaScript SDK para la API SAE — Facturación Electrónica de Hacienda CR",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
         ".": {
-            "require": "./dist/index.js",
             "import": "./dist/index.js",
             "types": "./dist/index.d.ts"
         }

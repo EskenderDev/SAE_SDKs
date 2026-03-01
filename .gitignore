@@ -4,7 +4,8 @@ typescript/node_modules/
 android/.gradle/
 android/build/
 
-# Builds
+# Builds  
+dist/
 typescript/dist/
 csharp/bin/
 csharp/obj/
