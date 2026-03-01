@@ -1,5 +1,5 @@
-import { ApiClient } from '../client/SaeClient';
-import { LogFilter, LogResponse } from '../models/logs';
+import { ApiClient } from '../client/SaeClient.js';
+import { LogFilter, LogResponse } from '../models/logs.js';
 
 export class SystemLogService {
     private client: ApiClient;

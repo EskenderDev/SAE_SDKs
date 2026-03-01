@@ -1,6 +1,6 @@
 {
     "name": "sae-ts-sdk",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "type": "module",
     "description": "TypeScript/JavaScript SDK para la API SAE — Facturación Electrónica de Hacienda CR",
     "main": "dist/index.js",
@@ -60,8 +60,7 @@
         "typescript": "^5.0.0"
     },
     "dependencies": {
-        "axios": "^1.0.0",
-        "sae-ts-sdk": "^0.1.0"
+        "axios": "^1.0.0"
     },
     "peerDependencies": {
         "@microsoft/signalr": ">=6.0.0"

@@ -42,7 +42,7 @@ import {
     UpdatePlatformModuleRequest,
     CreateDeveloperModuleRequest,
     UpdateDeveloperModuleRequest
-} from '../models/requests';
+} from '../models/requests.js';
 import {
     LoginResult,
     PasswordResetResponse,
@@ -93,8 +93,8 @@ import {
     GlobalStatsResponse,
     SaeIdentifierResponse,
     PlatformModuleResponse
-} from '../models/responses';
-import { SystemLogService } from '../services/systemLogService';
+} from '../models/responses.js';
+import { SystemLogService } from '../services/systemLogService.js';
 
 export interface ApiClient {
     get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;

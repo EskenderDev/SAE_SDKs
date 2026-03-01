@@ -3,7 +3,7 @@ import {
     LicenseStatus,
     LicensePlatform,
     HaciendaEstado
-} from './enums';
+} from './enums.js';
 
 // --- AUTH ---
 

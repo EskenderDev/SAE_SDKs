@@ -8,7 +8,7 @@ import {
     HaciendaEstado,
     LicenseType,
     LicensePlatform
-} from './enums';
+} from './enums.js';
 
 export interface CodigoComercialRequest {
     tipo: string;
