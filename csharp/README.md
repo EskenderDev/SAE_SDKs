@@ -1,5 +1,8 @@
 # SAE.Sdk
 
+[![NuGet version](https://img.shields.io/nuget/v/CR.SAE.SDK)](https://www.nuget.org/packages/CR.SAE.SDK)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 SDK C# para interactuar con la API de **Hacienda Costa Rica (SAE System)**. 
 
 Este paquete proporciona un cliente unificado (`SaeClient`) que maneja la comunicación REST y eventos en tiempo real a través de SignalR.

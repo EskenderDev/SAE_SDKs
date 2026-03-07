@@ -8,12 +8,14 @@
     
     <!-- NuGet Metadata -->
     <PackageId>CR.SAE.SDK</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.3.0</Version>
     <Authors>EskenderDev</Authors>
     <Company>EskenderDev</Company>
+    <Copyright>Copyright © 2026 EskenderDev</Copyright>
     <Description>SDK C# para interactuar con la API de Hacienda Costa Rica (SAE System). Soporta REST y tiempo real vía SignalR.</Description>
     <PackageProjectUrl>https://github.com/EskenderDev/SAE_SDKs</PackageProjectUrl>
     <RepositoryUrl>https://github.com/EskenderDev/SAE_SDKs</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageTags>hacienda;costarica;factura-electronica;sae;sdk;signalr</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

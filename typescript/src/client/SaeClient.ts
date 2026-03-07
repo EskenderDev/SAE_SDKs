@@ -58,6 +58,7 @@ import {
     PagedResult,
     DocumentoJsonDto,
     CommissionSettlementDto,
+    AdminConfigResponse,
     SalesCommissionDto,
     LicensePackageResponse,
     LicenseAddonResponse,
@@ -246,6 +247,12 @@ export class SaeClient implements ApiClient {
 
     public async adminMe(): Promise<AdminMeResponse> {
         return await this.get<AdminMeResponse>('v1/admin/auth/me');
+    }
+
+    public async getAdminConfig(adminKey: string): Promise<AdminConfigResponse> {
+        return await this.get<AdminConfigResponse>('v1/admin/config', {
+            headers: { 'X-Admin-Key': adminKey }
+        });
     }
 
     public async adminImpersonate(tenantId: string): Promise<ImpersonateResponse> {

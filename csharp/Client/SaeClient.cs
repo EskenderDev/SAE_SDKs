@@ -129,6 +129,15 @@ public class SaeClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// Registra un nuevo tenant/usuario en la plataforma.
+    /// </summary>
+    public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
+    {
+        var response = await _http.PostAsJsonAsync("auth/register", request);
+        return await HandleResponseAsync<AuthResponse>(response);
+    }
+
+    /// <summary>
     /// Inicia sesión como administrador y obtiene el token de acceso.
     /// </summary>
     public async Task<string> AdminLoginAsync(string email, string password)
@@ -631,6 +640,18 @@ public class SaeClient : IAsyncDisposable
     {
         var response = await _http.GetAsync("admin/analytics/global-stats");
         return await HandleResponseAsync<GlobalStatsResponse>(response);
+    }
+
+    /// <summary>
+    /// Obtiene la configuración global de la plataforma (Solo Admin).
+    /// </summary>
+    public async Task<AdminConfigResponse> GetAdminConfigAsync(string adminKey)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "admin/config");
+        request.Headers.Add("X-Admin-Key", adminKey);
+
+        var response = await _http.SendAsync(request);
+        return await HandleResponseAsync<AdminConfigResponse>(response);
     }
 
     #endregion

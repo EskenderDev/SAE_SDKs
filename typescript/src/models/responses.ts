@@ -215,6 +215,8 @@ export interface LicenseResponse {
     appVersion?: string;
     lastIpAddress?: string;
     deviceName?: string;
+    appIdentifier?: string;
+    appName?: string;
     offlineToken?: string;
     modules?: string[];
     allowedModules?: string[];
@@ -681,4 +683,23 @@ export interface PlatformModuleResponse {
     appIdentifier?: string;
     createdAt: string;
     updatedAt?: string;
+}
+
+export interface AdminConfigResponse {
+    environment: string;
+    haciendaUrl?: string;
+    haciendaEnabled: boolean;
+    frontendUrl?: string;
+    smtpHost?: string;
+    databaseProvider?: string;
+    azureServiceBusConfigured: boolean;
+    azureRedisConfigured: boolean;
+    azureBlobConfigured: boolean;
+    azureKeyVaultUrl?: string;
+    appInsightsEnabled: boolean;
+    jwtExpiration?: string;
+    serverTime: string;
+    dotNetVersion: string;
+    os: string;
+    processorCount: number;
 }

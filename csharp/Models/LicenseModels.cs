@@ -46,6 +46,8 @@ public class LicenseResponse
     public string? AppVersion { get; set; }
     public string? LastIpAddress { get; set; }
     public string? DeviceName { get; set; }
+    public string? AppIdentifier { get; set; }
+    public string? AppName { get; set; }
     public string? OfflineToken { get; set; }
 }
 
@@ -149,4 +151,27 @@ public class RegisteredApplicationResponse
     public string RequiredPlatform { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Configuración global de la plataforma (Solo Admin).
+/// </summary>
+public class AdminConfigResponse
+{
+    public string Environment { get; set; } = string.Empty;
+    public string? HaciendaUrl { get; set; }
+    public bool HaciendaEnabled { get; set; }
+    public string? FrontendUrl { get; set; }
+    public string? SmtpHost { get; set; }
+    public string? DatabaseProvider { get; set; }
+    public bool AzureServiceBusConfigured { get; set; }
+    public bool AzureRedisConfigured { get; set; }
+    public bool AzureBlobConfigured { get; set; }
+    public string? AzureKeyVaultUrl { get; set; }
+    public bool AppInsightsEnabled { get; set; }
+    public string? JwtExpiration { get; set; }
+    public DateTime ServerTime { get; set; }
+    public string DotNetVersion { get; set; } = string.Empty;
+    public string OS { get; set; } = string.Empty;
+    public int ProcessorCount { get; set; }
 }

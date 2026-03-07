@@ -463,6 +463,26 @@ public class TenantResponse
     public string? EconomicActivityCode { get; set; }
 }
 
+public class RegisterRequest
+{
+    [Required] public string CompanyName { get; set; } = string.Empty;
+    [Required] public string TaxId { get; set; } = string.Empty;
+    [Required] [EmailAddress] public string Email { get; set; } = string.Empty;
+    [Required] public string Password { get; set; } = string.Empty;
+    public string? ReferralCode { get; set; }
+}
+
+public class AuthResponse
+{
+    public string Token { get; set; } = string.Empty;
+    public DateTime Expiration { get; set; }
+    public string RefreshToken { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public Guid? TenantId { get; set; }
+    public bool RequiresActivation { get; set; }
+}
+
 public record LoginResult { public string Token { get; set; } = string.Empty; }
 public record DocumentoResult { public string XmlFirmado { get; set; } = string.Empty; public string Clave { get; set; } = string.Empty; }
 

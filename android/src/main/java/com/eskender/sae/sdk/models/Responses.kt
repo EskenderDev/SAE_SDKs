@@ -63,3 +63,22 @@ data class PasswordResetResponse(
     @Json(name = "success") val success: Boolean,
     @Json(name = "message") val message: String
 )
+
+@JsonClass(generateAdapter = true)
+data class LicenseResponse(
+    @Json(name = "id") val id: String,
+    @Json(name = "tenantId") val tenantId: String,
+    @Json(name = "licenseKey") val licenseKey: String,
+    @Json(name = "machineId") val machineId: String? = null,
+    @Json(name = "type") val type: String, // Or use Enum if mapped
+    @Json(name = "platform") val platform: String,
+    @Json(name = "status") val status: String,
+    @Json(name = "expirationDate") val expirationDate: String? = null,
+    @Json(name = "lastCheckIn") val lastCheckIn: String? = null,
+    @Json(name = "appVersion") val appVersion: String? = null,
+    @Json(name = "lastIpAddress") val lastIpAddress: String? = null,
+    @Json(name = "deviceName") val deviceName: String? = null,
+    @Json(name = "appIdentifier") val appIdentifier: String? = null,
+    @Json(name = "appName") val appName: String? = null,
+    @Json(name = "offlineToken") val offlineToken: String? = null
+)

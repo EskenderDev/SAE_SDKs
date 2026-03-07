@@ -364,7 +364,7 @@ export interface RegisterRequest {
     email: string;
     password: string;
     tier?: number;
-    sellerCode?: string;
+    referralCode?: string;
 }
 
 

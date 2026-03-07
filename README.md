@@ -6,8 +6,8 @@ Este repositorio contiene todos los SDKs oficiales de la plataforma **SAE (Siste
 
 | SDK | Directorio | Package | Runtimes |
 |-----|-----------|---------|----------|
-| **C# / .NET** | [`csharp/`](./csharp/) | `CR.SAE.SDK` (NuGet) | net8 · net9 · net10 |
-| **TypeScript / Node** | [`typescript/`](./typescript/) | `sae-ts-sdk` (npm) | ESM · CJS |
+| **C# / .NET** | [`csharp/`](./csharp/) | [`CR.SAE.SDK` (NuGet)](https://www.nuget.org/packages/CR.SAE.SDK) | net8 · net9 · net10 |
+| **TypeScript / Node** | [`typescript/`](./typescript/) | [`sae-ts-sdk` (npm)](https://www.npmjs.com/package/sae-ts-sdk) | ESM · CJS |
 | **Android / Kotlin** | [`android/`](./android/) | AAR import | Android API 21+ |
 
 ## Instalación Rápida
@@ -51,6 +51,12 @@ cd csharp
 dotnet build
 dotnet pack         # Genera el .nupkg local
 ```
+
+## Últimos Cambios (v0.3.1 / v1.1.0)
+
+- **Licencias**: Se añadieron los campos `AppIdentifier` y `AppName` a la respuesta detallada de licencias en todos los SDKs.
+- **Trazabilidad**: Mejora en la identificación de la aplicación de origen para activaciones de addons.
+- **Correcciones**: Sincronización de modelos de respuesta entre C#, Kotlin y TypeScript.
 
 ## Contribuir
 
