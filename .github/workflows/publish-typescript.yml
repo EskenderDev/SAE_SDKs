@@ -26,6 +26,14 @@ jobs:
         run: npm run build
         working-directory: typescript
         
+      - name: Check for NPM Token
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::error::NPM_TOKEN is missing. Please add it to repository secrets."
+            exit 1
+          fi
+
       - name: Publish to npm
         run: npm publish --access public
         working-directory: typescript

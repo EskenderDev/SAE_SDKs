@@ -26,5 +26,13 @@ jobs:
       - name: Pack
         run: dotnet pack csharp/SAE.Sdk.csproj -c Release --no-build -o dist
         
+      - name: Check for NuGet API Key
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.NUGET_API_KEY }}" ]; then
+            echo "::error::NUGET_API_KEY is missing. Please add it to repository secrets."
+            exit 1
+          fi
+
       - name: Push to NuGet
         run: dotnet nuget push dist/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
