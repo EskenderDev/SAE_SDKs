@@ -80,5 +80,8 @@ data class LicenseResponse(
     @Json(name = "deviceName") val deviceName: String? = null,
     @Json(name = "appIdentifier") val appIdentifier: String? = null,
     @Json(name = "appName") val appName: String? = null,
-    @Json(name = "offlineToken") val offlineToken: String? = null
+    @Json(name = "offlineToken") val offlineToken: String? = null,
+    @Json(name = "terminalId") val terminalId: String? = null,
+    @Json(name = "terminalName") val terminalName: String? = null,
+    @Json(name = "terminalCode") val terminalCode: String? = null
 )

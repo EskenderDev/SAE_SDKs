@@ -49,6 +49,9 @@ public class LicenseResponse
     public string? AppIdentifier { get; set; }
     public string? AppName { get; set; }
     public string? OfflineToken { get; set; }
+    public Guid? TerminalId { get; set; }
+    public string? TerminalName { get; set; }
+    public string? TerminalCode { get; set; }
 }
 
 /// <summary>
@@ -89,6 +92,9 @@ public class LicenseValidationResult
     public List<string>? Features { get; set; }
     public List<LicenseModuleInfo>? Modules { get; set; }
     public string? Message { get; set; }
+    public Guid? TerminalId { get; set; }
+    public string? TerminalName { get; set; }
+    public string? TerminalCode { get; set; }
 }
 
 /// <summary>

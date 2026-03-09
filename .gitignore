@@ -33,3 +33,9 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Build logs and temp files
+build_*.txt
+csharp_forma.txt
+kt_forma.txt
+ts_forma.txt

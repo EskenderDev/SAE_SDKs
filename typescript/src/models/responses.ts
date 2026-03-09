@@ -221,6 +221,9 @@ export interface LicenseResponse {
     modules?: string[];
     allowedModules?: string[];
     packageName?: string;
+    terminalId?: string;
+    terminalName?: string;
+    terminalCode?: string;
 }
 
 export interface LicensePackageResponse {
@@ -657,6 +660,9 @@ export interface TenantLicense {
     features?: string[];
     modules?: LicenseModuleInfo[];
     message?: string;
+    terminalId?: string;
+    terminalName?: string;
+    terminalCode?: string;
 }
 export interface AdminTenantResponse {
     id: string;
