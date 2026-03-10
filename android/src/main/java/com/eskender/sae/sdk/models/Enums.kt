@@ -423,3 +423,37 @@ enum class HaciendaEstado {
     Error,
     Procesando
 }
+
+/**
+ * Tipo de licencia para aplicaciones externas
+ */
+enum class LicenseType {
+    Server,
+    AndroidPOS,
+    WindowsPOS,
+    Kiosk,
+    RestaurantPOS,
+    RetailPOS,
+    Terminal
+}
+
+/**
+ * Plataformas soportadas para aplicaciones
+ */
+enum class LicensePlatform {
+    Android,
+    Windows,
+    Server,
+    Linux,
+    MacOS
+}
+
+/**
+ * Estado de una licencia específica
+ */
+enum class LicenseStatus {
+    Active,
+    Revoked,
+    Suspended,
+    Expired
+}

@@ -1342,7 +1342,10 @@ public enum LicenseAction
 public enum LicensePlatform
 {
     Android = 0,
-    Windows = 1
+    Windows = 1,
+    Server = 2,
+    Linux = 3,
+    MacOS = 4
 }
 
 /// <summary>

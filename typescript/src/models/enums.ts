@@ -1083,7 +1083,10 @@ export enum LicenseAction {
 
 export enum LicensePlatform {
     Android = "Android",
-    Windows = "Windows"
+    Windows = "Windows",
+    Server = "Server",
+    Linux = "Linux",
+    MacOS = "MacOS"
 }
 
 export enum LicenseAddonStatus {
