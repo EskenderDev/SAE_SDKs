@@ -658,11 +658,12 @@ export interface TenantLicense {
     expirationDate?: string;
     offlineToken?: string;
     features?: string[];
-    modules?: LicenseModuleInfo[];
+    modules?: string[] | LicenseModuleInfo[];
     message?: string;
     terminalId?: string;
     terminalName?: string;
     terminalCode?: string;
+    branchCode?: string;
 }
 export interface AdminTenantResponse {
     id: string;

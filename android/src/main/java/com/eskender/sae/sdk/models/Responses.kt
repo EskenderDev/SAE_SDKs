@@ -83,5 +83,7 @@ data class LicenseResponse(
     @Json(name = "offlineToken") val offlineToken: String? = null,
     @Json(name = "terminalId") val terminalId: String? = null,
     @Json(name = "terminalName") val terminalName: String? = null,
-    @Json(name = "terminalCode") val terminalCode: String? = null
+    @Json(name = "terminalCode") val terminalCode: String? = null,
+    @Json(name = "branchCode") val branchCode: String? = null,
+    @Json(name = "modules") val modules: List<String>? = null
 )

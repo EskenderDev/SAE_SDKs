@@ -664,7 +664,7 @@ public class SaeClient : IAsyncDisposable
     public async Task<LicenseValidationResult> ValidateLicenseAsync(ValidateLicenseRequest request)
     {
         var response = await _http.PostAsJsonAsync("v1/licenses/validate", request);
-        return await HandleResponseAsync<LicenseValidationResult>(response);
+        return await HandleLicenseResponseAsync(response);
     }
 
     /// <summary>
@@ -673,7 +673,7 @@ public class SaeClient : IAsyncDisposable
     public async Task<LicenseValidationResult> ActivateLicenseAsync(ActivateLicenseRequest request)
     {
         var response = await _http.PostAsJsonAsync("v1/licenses/activate", request);
-        return await HandleResponseAsync<LicenseValidationResult>(response);
+        return await HandleLicenseResponseAsync(response);
     }
 
     /// <summary>
@@ -685,7 +685,12 @@ public class SaeClient : IAsyncDisposable
         if (tenantId.HasValue) query += $"&tenantId={tenantId}";
         
         var response = await _http.GetAsync(query);
-        return await HandleResponseAsync<List<object>>(response);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error SAE API: {response.StatusCode} - {error}");
+        }
+        return (await response.Content.ReadFromJsonAsync<List<object>>(_readOptions))!;
     }
 
     #endregion
@@ -703,6 +708,45 @@ public class SaeClient : IAsyncDisposable
             throw new HttpRequestException($"Error SAE API: {response.StatusCode} - {error}");
         }
         return (await response.Content.ReadFromJsonAsync<T>(_readOptions))!;
+    }
+
+    private async Task<LicenseValidationResult> HandleLicenseResponseAsync(HttpResponseMessage response)
+    {
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error SAE API: {response.StatusCode} - {error}");
+        }
+
+        // Leer como JsonDocument para manejar manualmente el campo Modules si es necesario
+        using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = doc.RootElement;
+        
+        var result = new LicenseValidationResult
+        {
+            Status = root.TryGetProperty("status", out var s) ? (s.GetString() ?? "") : "",
+            LicenseId = root.TryGetProperty("licenseId", out var lid) && lid.ValueKind != JsonValueKind.Null ? lid.GetGuid() : null,
+            Type = root.TryGetProperty("type", out var typ) ? typ.GetString() : null,
+            ExpirationDate = root.TryGetProperty("expirationDate", out var exp) && exp.ValueKind != JsonValueKind.Null ? exp.GetDateTime() : null,
+            OfflineToken = root.TryGetProperty("offlineToken", out var tok) ? tok.GetString() : null,
+            Message = root.TryGetProperty("message", out var msg) ? msg.GetString() : null,
+            TerminalId = root.TryGetProperty("terminalId", out var tid) && tid.ValueKind != JsonValueKind.Null ? tid.GetGuid() : null,
+            TerminalName = root.TryGetProperty("terminalName", out var tname) ? tname.GetString() : null,
+            TerminalCode = root.TryGetProperty("terminalCode", out var tcode) ? tcode.GetString() : null,
+            BranchCode = root.TryGetProperty("branchCode", out var bcode) ? bcode.GetString() : null
+        };
+
+        if (root.TryGetProperty("features", out var feat) && feat.ValueKind == JsonValueKind.Array)
+        {
+            result.Features = JsonSerializer.Deserialize<List<string>>(feat.GetRawText(), _readOptions);
+        }
+
+        if (root.TryGetProperty("modules", out var mod) && mod.ValueKind == JsonValueKind.Array)
+        {
+            result.Modules = JsonSerializer.Deserialize<List<string>>(mod.GetRawText(), _readOptions);
+        }
+
+        return result;
     }
 
     #region Realtime (SignalR) Methods

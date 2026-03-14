@@ -52,6 +52,8 @@ public class LicenseResponse
     public Guid? TerminalId { get; set; }
     public string? TerminalName { get; set; }
     public string? TerminalCode { get; set; }
+    public string? BranchCode { get; set; }
+    public List<string>? Modules { get; set; }
 }
 
 /// <summary>
@@ -90,32 +92,12 @@ public class LicenseValidationResult
     public DateTime? ExpirationDate { get; set; }
     public string? OfflineToken { get; set; }
     public List<string>? Features { get; set; }
-    public List<LicenseModuleInfo>? Modules { get; set; }
+    public List<string>? Modules { get; set; }
     public string? Message { get; set; }
     public Guid? TerminalId { get; set; }
     public string? TerminalName { get; set; }
     public string? TerminalCode { get; set; }
-}
-
-/// <summary>
-/// Información detallada de un módulo de licencia.
-/// </summary>
-public class LicenseModuleInfo
-{
-    public Guid ModuleId { get; set; }
-    public string Code { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public string? Category { get; set; }
-    public bool IsActive { get; set; }
-    public DateTime GrantedAt { get; set; }
-    public DateTime? ExpiresAt { get; set; }
-    public int? MaxUsageCount { get; set; }
-    public int CurrentUsageCount { get; set; }
-    public bool IsExpired { get; set; }
-    public bool IsUsageLimitReached { get; set; }
-    public List<string>? RequiresModules { get; set; }
-    public Dictionary<string, object>? Metadata { get; set; }
+    public string? BranchCode { get; set; }
 }
 
 /// <summary>
