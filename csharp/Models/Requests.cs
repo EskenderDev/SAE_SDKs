@@ -39,8 +39,7 @@ public record ClaveRequest(
 public record ConsecutivoRequest(
     [Range(1, 999)] int Establecimiento,
     [Range(1, 99999)] int Terminal,
-    [Range(1, 9999999999)] long NumeroConsecutivo,
-    string TipoComprobante);
+    [Range(1, 9999999999)] long NumeroConsecutivo);
 
 public record IdentificacionRequest(
     string Tipo,
@@ -440,6 +439,11 @@ public class UpdateTenantRequest
     public string? AddressDetails { get; set; }
     public string? EconomicActivityCode { get; set; }
     public bool? IsActive { get; set; }
+    public string? LocationNamesJson { get; set; }
+    public string? DefaultCurrency { get; set; }
+    public decimal? DefaultCurrencyRate { get; set; }
+    public string? PrimaryColor { get; set; }
+    public string? PaymentInstructions { get; set; }
 }
 
 public class TenantResponse
@@ -503,9 +507,16 @@ public record MensajeEndosoRequest(
     string NumeroConsecutivoReceptor,
     int Mensaje = 4, // 1: Aceptado, 2: Parcial, 3: Rechazo, 4: Cesión
     string? NombreReceptor = null,
+    string? TipoIdentificacionReceptor = null);
 
-
-string? TipoIdentificacionReceptor = null);
+/// <summary>
+/// Respuesta del endpoint de aceptación/endoso de documentos.
+/// </summary>
+public record MensajeReceptorResponse(
+    bool Success,
+    string Message,
+    string XmlFirmado,
+    HaciendaEnvioResult? HaciendaEnvio);
 
 public record DocumentSequenceDto(
     string DocumentType,
@@ -530,6 +541,12 @@ public class EnviarDocumentoSimplificadoRequest
 {
     /// <summary>01=FE, 02=ND, 03=NC, 04=Tiquete, 08=FEC, 09=FECE</summary>
     public string TipoDocumento { get; set; } = "01";
+
+    /// <summary>Clave numérica de 50 dígitos (opcional, se genera si no se provee)</summary>
+    public string? Clave { get; set; }
+
+    /// <summary>Consecutivo personalizado (opcional, se genera si no se provee)</summary>
+    public ConsecutivoRequest? Consecutivo { get; set; }
 
     /// <summary>01=Contado, 02=Crédito, etc.</summary>
     public string CondicionVenta { get; set; } = "01";
@@ -561,6 +578,7 @@ public class EnviarDocumentoSimplificadoRequest
 
     /// <summary>Otros cargos (opcional)</summary>
     public List<OtrosCargosRequest>? OtrosCargos { get; set; }
+
 }
 
 /// <summary>
@@ -631,6 +649,21 @@ public record PartnerProfileDto(
     string Level,
     string Status,
     decimal Balance,
-    string? PhoneNumber,
     string? Website);
+
+public record EnqueueNotificationRequest(
+    string Subject,
+    string Body,
+    string? ToEmail = null,
+    string? UserId = null,
+    string? Role = null,
+    bool SendEmail = true,
+    bool SendPush = true,
+    string TemplateName = "Default",
+    Dictionary<string, string>? TemplateData = null
+);
+
+public record UnreadNotificationsResponse(
+    int Count, 
+    List<SystemNotificationDto> Items);
 

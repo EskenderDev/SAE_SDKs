@@ -183,6 +183,19 @@ export class SaeClient implements ApiClient {
 
     // --- GENERIC HTTP METHODS ---
 
+    /**
+     * Verifica la salud de la plataforma.
+     * @returns True si la plataforma está saludable, false en caso contrario.
+     */
+    public async checkHealth(): Promise<boolean> {
+        try {
+            const response = await this.http.get('../health');
+            return response.status === 200;
+        } catch (error) {
+            return false;
+        }
+    }
+
     public async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
         const response = await this.http.get<T>(url, config);
         return response.data;

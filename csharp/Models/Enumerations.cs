@@ -1435,7 +1435,9 @@ public enum NotificationType
     [Description("Éxito")] Success = 1,
     [Description("Advertencia")] Warning = 2,
     [Description("Error")] Error = 3,
-    [Description("Alerta de Sistema")] SystemAlert = 4
+    [Description("Alerta de Sistema")] SystemAlert = 4,
+    [Description("Correo Electrónico")] Email = 5,
+    [Description("Notificación de Aplicación")] App = 6
 }
 
 /// <summary>

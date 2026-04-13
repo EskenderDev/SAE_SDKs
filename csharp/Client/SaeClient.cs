@@ -15,13 +15,15 @@ public class SaeClient : IAsyncDisposable
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     public string BaseUrl => _baseUrl;
-    private readonly string _hubUrl;
+    private readonly string _haciendaHubUrl;
+    private readonly string _appHubUrl;
     private string? _token;
     private string? _apiKey;
     private string? _tenantId;
 
     // SignalR
-    private HubConnection? _connection;
+    private HubConnection? _haciendaConnection;
+    private HubConnection? _appConnection;
 
     /// <summary>
     /// Evento que se dispara cuando se inicia un envío de documento.
@@ -34,14 +36,37 @@ public class SaeClient : IAsyncDisposable
     public event Action<HaciendaRespuestaRecibidaEvent>? OnRespuestaRecibida;
 
     /// <summary>
-    /// Evento que se dispara cuando se recibe una notificación de sistema.
+    /// Evento que se dispara cuando se inicia un mensaje receptor (aceptación/endoso).
+    /// </summary>
+    public event Action<HaciendaMensajeIniciadoEvent>? OnMensajeIniciado;
+
+    /// <summary>
+    /// Evento que se dispara cuando se recibe la respuesta de un mensaje receptor.
+    /// </summary>
+    public event Action<HaciendaMensajeRespuestaEvent>? OnMensajeRespuestaRecibida;
+
+    /// <summary>
+    /// Evento que se dispara cuando se recibe una notificación de sistema (HaciendaHub).
     /// </summary>
     public event Action<SystemNotificationDto>? OnNotificationReceived;
 
     /// <summary>
-    /// Evento que se dispara cuando la conexión en tiempo real se pierde.
+    /// Evento que se dispara cuando se recibe una notificación de aplicación (AppHub).
     /// </summary>
+    public event Action<string, object?>? OnAppEventReceived;
+ 
+    /// <summary>
+    /// Evento que se dispara cuando la conexión de Hacienda se pierde.
+    /// </summary>
+    public event Action<Exception?>? OnHaciendaRealtimeClosed;
+ 
+    [Obsolete("Use OnHaciendaRealtimeClosed")]
     public event Action<Exception?>? OnRealtimeClosed;
+ 
+    /// <summary>
+    /// Evento que se dispara cuando la conexión de App se pierde.
+    /// </summary>
+    public event Action<Exception?>? OnAppRealtimeClosed;
 
     /// <summary>
     /// Inicializa una nueva instancia del cliente SAE.
@@ -51,7 +76,8 @@ public class SaeClient : IAsyncDisposable
     public SaeClient(string baseUrl = "https://localhost:5000", HttpClient? httpClient = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
-        _hubUrl = _baseUrl + "/hubs/hacienda";
+        _haciendaHubUrl = _baseUrl + "/hubs/hacienda";
+        _appHubUrl = _baseUrl + "/hubs/app";
 
         var restBaseUrl = _baseUrl.EndsWith("/api") ? _baseUrl + "/" : _baseUrl + "/api/";
         _http = httpClient ?? new HttpClient { BaseAddress = new Uri(restBaseUrl) };
@@ -179,6 +205,27 @@ public class SaeClient : IAsyncDisposable
 
     #endregion
 
+    #region Health Check
+
+    /// <summary>
+    /// Verifica la salud de la plataforma.
+    /// </summary>
+    /// <returns>True si la plataforma está saludable, false en caso contrario.</returns>
+    public async Task<bool> CheckHealthAsync()
+    {
+        try
+        {
+            var response = await _http.GetAsync("../health");
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    #endregion
+
     #region Sequences
 
     public async Task<DocumentSequenceDto> UpdateSequenceAsync(Guid terminalId, string docType, UpdateSequenceRequest request)
@@ -301,7 +348,9 @@ public class SaeClient : IAsyncDisposable
 
     /// <summary>
     /// Genera un documento electrónico (XML firmado) a través de la API.
+    /// OBSOLETO: Se recomienda usar EmitirAsync.
     /// </summary>
+    [Obsolete("Use EmitirAsync.")]
     public async Task<DocumentoResult> GenerarDocumentoAsync(GenerarDocumentoRequest documento)
     {
         var options = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
@@ -310,8 +359,10 @@ public class SaeClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Envía un documento electrónico a Hacienda a través de la API.
+    /// Envía un documento electrónico detallado a Hacienda.
+    /// OBSOLETO: Se recomienda usar EmitirAsync para una integración más sencilla.
     /// </summary>
+    [Obsolete("Use EmitirAsync para envíos simplificados o consulte con soporte si requiere envío detallado.")]
     public async Task<HaciendaEnvioResult> EnviarDocumentoAsync(GenerarDocumentoRequest documento)
     {
         var options = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
@@ -320,15 +371,37 @@ public class SaeClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Envía un documento simplificado a Hacienda (enviarHacienda).
-    /// El servidor auto-rellena Emisor, Clave, Consecutivo desde datos del Tenant.
-    /// Terminal se resuelve desde el header X-Terminal-Key (ver SetTerminalKey).
+    /// Punto de entrada principal para el envío de documentos electrónicos (Factura, Tiquete, Nota de Crédito).
+    /// El servidor auto-rellena Emisor, Clave, Consecutivo desde datos del Tenant si no se proporcionan.
     /// </summary>
     public async Task<HaciendaEnvioResult> EmitirAsync(EnviarDocumentoSimplificadoRequest request)
     {
         var options = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
         var response = await _http.PostAsJsonAsync("v1/hacienda/emitir", request, options);
         return await HandleResponseAsync<HaciendaEnvioResult>(response);
+    }
+
+    /// <summary>
+    /// Método de conveniencia para emitir una Nota de Crédito que anula una factura anterior.
+    /// </summary>
+    /// <param name="claveFacturaOriginal">Clave de 50 dígitos de la factura a anular.</param>
+    /// <param name="razon">Razón de la anulación.</param>
+    /// <param name="lineas">Opcional: Líneas que se reintegran (si es anulación total, omitir para que se asuman todas).</param>
+    public async Task<HaciendaEnvioResult> EmitirNotaCreditoAnulasenAsync(string claveFacturaOriginal, string razon, List<LineaDetalleRequest>? lineas = null)
+    {
+        var request = new EnviarDocumentoSimplificadoRequest
+        {
+            TipoDocumento = "03",
+            Referencia = new ReferenciaSimplificada
+            {
+                ClaveDocumentoReferencia = claveFacturaOriginal,
+                Codigo = "01", // Anula documento de referencia
+                Razon = razon
+            },
+            Lineas = lineas ?? new List<LineaDetalleRequest>() // Si va vacío, el backend debería manejarlo o requerir al menos una
+        };
+
+        return await EmitirAsync(request);
     }
 
     /// <summary>
@@ -343,19 +416,19 @@ public class SaeClient : IAsyncDisposable
     /// <summary>
     /// Realiza el endoso (cesión de derechos) de un documento.
     /// </summary>
-    public async Task<DocumentoResult> EndosarDocumentoAsync(MensajeEndosoRequest request)
+    public async Task<MensajeReceptorResponse> EndosarDocumentoAsync(MensajeEndosoRequest request)
     {
         var response = await _http.PostAsJsonAsync("v1/hacienda/endosar", request);
-        return await HandleResponseAsync<DocumentoResult>(response);
+        return await HandleResponseAsync<MensajeReceptorResponse>(response);
     }
 
     /// <summary>
     /// Envía un mensaje de aceptación o rechazo (Mensaje de Receptor).
     /// </summary>
-    public async Task<DocumentoResult> ConfirmarDocumentoAsync(MensajeEndosoRequest request)
+    public async Task<MensajeReceptorResponse> ConfirmarDocumentoAsync(MensajeEndosoRequest request)
     {
         var response = await _http.PostAsJsonAsync("v1/hacienda/aceptar", request);
-        return await HandleResponseAsync<DocumentoResult>(response);
+        return await HandleResponseAsync<MensajeReceptorResponse>(response);
     }
 
     #endregion
@@ -403,21 +476,61 @@ public class SaeClient : IAsyncDisposable
     /// </summary>
     public async Task<BillingInfoDto> GetBillingInfoAsync()
     {
-        var response = await _http.GetAsync("subscription/billing-info");
+        var response = await _http.GetAsync("v1/subscription/billing-info"); // Se ajustó a v1/
         return await HandleResponseAsync<BillingInfoDto>(response);
+    }
+
+    /// <summary>
+    /// Compra un paquete de documentos extras.
+    /// </summary>
+    public async Task<T> PurchaseEnvelopeAsync<T>(object request)
+    {
+        var response = await _http.PostAsJsonAsync("v1/subscription/purchase-envelope", request);
+        return await HandleResponseAsync<T>(response);
+    }
+
+    /// <summary>
+    /// Reporta un pago para la suscripción mensual.
+    /// </summary>
+    public async Task<T> ReportSubscriptionPaymentAsync<T>(object request)
+    {
+        var response = await _http.PostAsJsonAsync("v1/subscription/report-payment", request);
+        return await HandleResponseAsync<T>(response);
     }
 
     #endregion
 
-    #region Notifications
+    #region Notifications & Email Engine
+
+    /// <summary>
+    /// Encola una notificación para ser enviada vía Email, SignalR o ambos de forma asíncrona (Outbox).
+    /// </summary>
+    public async Task EnqueueNotificationAsync(EnqueueNotificationRequest request)
+    {
+        var response = await _http.PostAsJsonAsync("v1/notifications/enqueue", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error encolando notificación: {response.StatusCode} - {error}");
+        }
+    }
+
+    /// <summary>
+    /// Obtiene las notificaciones del usuario actual.
+    /// </summary>
+    public async Task<List<SystemNotificationDto>> GetNotificationsAsync(int take = 50)
+    {
+        var response = await _http.GetAsync($"notifications?take={take}");
+        return await HandleResponseAsync<List<SystemNotificationDto>>(response);
+    }
 
     /// <summary>
     /// Obtiene las notificaciones no leídas del tenant.
     /// </summary>
-    public async Task<List<SystemNotificationDto>> GetNotificationsAsync()
+    public async Task<UnreadNotificationsResponse> GetUnreadNotificationsAsync()
     {
-        var response = await _http.GetAsync("notifications");
-        return await HandleResponseAsync<List<SystemNotificationDto>>(response);
+        var response = await _http.GetAsync("notifications/unread");
+        return await HandleResponseAsync<UnreadNotificationsResponse>(response);
     }
 
     /// <summary>
@@ -695,6 +808,111 @@ public class SaeClient : IAsyncDisposable
 
     #endregion
 
+    #region Realtime (SignalR) Methods
+
+    /// <summary>
+    /// Inicia la conexión en tiempo real con HaciendaHub.
+    /// </summary>
+    public async Task StartHaciendaRealtimeAsync()
+    {
+        if (_haciendaConnection != null && _haciendaConnection.State == HubConnectionState.Connected)
+            return;
+
+        _haciendaConnection = BuildHubConnection(_haciendaHubUrl);
+
+        _haciendaConnection.On<HaciendaEnvioIniciadoEvent>("HaciendaEnvioIniciado", (e) => OnEnvioIniciado?.Invoke(e));
+        _haciendaConnection.On<HaciendaRespuestaRecibidaEvent>("HaciendaRespuestaRecibida", (e) => OnRespuestaRecibida?.Invoke(e));
+        _haciendaConnection.On<HaciendaMensajeIniciadoEvent>("HaciendaMensajeIniciado", (e) => OnMensajeIniciado?.Invoke(e));
+        _haciendaConnection.On<HaciendaMensajeRespuestaEvent>("HaciendaMensajeRespuesta", (e) => OnMensajeRespuestaRecibida?.Invoke(e));
+        _haciendaConnection.On<SystemNotificationDto>("ReceiveNotification", (n) => OnNotificationReceived?.Invoke(n));
+
+        _haciendaConnection.Closed += (exception) =>
+        {
+            OnHaciendaRealtimeClosed?.Invoke(exception);
+            OnRealtimeClosed?.Invoke(exception);
+            return Task.CompletedTask;
+        };
+
+        await _haciendaConnection.StartAsync();
+    }
+
+    /// <summary>
+    /// Inicia la conexión en tiempo real con AppHub (Notificaciones externas).
+    /// </summary>
+    public async Task StartAppRealtimeAsync()
+    {
+        if (_appConnection != null && _appConnection.State == HubConnectionState.Connected)
+            return;
+
+        _appConnection = BuildHubConnection(_appHubUrl);
+
+        // Escuchar eventos de notificación por defecto
+        _appConnection.On<object>("ReceiveNotification", (payload) => OnAppEventReceived?.Invoke("ReceiveNotification", payload));
+
+        _appConnection.Closed += (exception) =>
+        {
+            OnAppRealtimeClosed?.Invoke(exception);
+            return Task.CompletedTask;
+        };
+
+        await _appConnection.StartAsync();
+    }
+
+    /// <summary>
+    /// Permite suscribirse a un evento específico del AppHub.
+    /// </summary>
+    public void OnAppEvent<T>(string methodName, Action<T> handler)
+    {
+        if (_appConnection == null) throw new InvalidOperationException("Debe llamar a StartAppRealtimeAsync primero.");
+        _appConnection.On<T>(methodName, handler);
+    }
+
+    private HubConnection BuildHubConnection(string hubUrl)
+    {
+        var fullUrl = hubUrl;
+        var queryParams = new List<string>();
+
+        if (!string.IsNullOrEmpty(_tenantId)) queryParams.Add($"tenantId={Uri.EscapeDataString(_tenantId)}");
+        if (!string.IsNullOrEmpty(_apiKey)) queryParams.Add($"apiKey={Uri.EscapeDataString(_apiKey)}");
+
+        if (queryParams.Count > 0)
+        {
+            fullUrl += "?" + string.Join("&", queryParams);
+        }
+
+        return new HubConnectionBuilder()
+            .WithUrl(fullUrl, options =>
+            {
+                if (!string.IsNullOrEmpty(_token))
+                {
+                    options.AccessTokenProvider = () => Task.FromResult<string?>(_token);
+                }
+
+                if (!string.IsNullOrEmpty(_apiKey))
+                {
+                    options.Headers.Add("X-API-KEY", _apiKey);
+                }
+            })
+            .WithAutomaticReconnect()
+            .Build();
+    }
+
+    /// <summary>
+    /// Detiene todas las conexiones en tiempo real.
+    /// </summary>
+    public async Task StopRealtimeAsync()
+    {
+        if (_haciendaConnection != null) await _haciendaConnection.StopAsync();
+        if (_appConnection != null) await _appConnection.StopAsync();
+    }
+
+    [Obsolete("Use StartHaciendaRealtimeAsync")]
+    public Task StartRealtimeAsync() => StartHaciendaRealtimeAsync();
+
+    #endregion
+
+    #region Helpers
+
     private static readonly JsonSerializerOptions _readOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -718,7 +936,6 @@ public class SaeClient : IAsyncDisposable
             throw new HttpRequestException($"Error SAE API: {response.StatusCode} - {error}");
         }
 
-        // Leer como JsonDocument para manejar manualmente el campo Modules si es necesario
         using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
         var root = doc.RootElement;
         
@@ -749,70 +966,6 @@ public class SaeClient : IAsyncDisposable
         return result;
     }
 
-    #region Realtime (SignalR) Methods
-
-    /// <summary>
-    /// Inicia la conexión en tiempo real para recibir notificaciones.
-    /// </summary>
-    public async Task StartRealtimeAsync()
-    {
-        if (_connection != null && _connection.State == HubConnectionState.Connected)
-            return;
-
-        var fullUrl = _hubUrl;
-        var queryParams = new List<string>();
-
-        if (!string.IsNullOrEmpty(_tenantId)) queryParams.Add($"tenantId={Uri.EscapeDataString(_tenantId)}");
-        if (!string.IsNullOrEmpty(_apiKey)) queryParams.Add($"apiKey={Uri.EscapeDataString(_apiKey)}");
-
-        if (queryParams.Count > 0)
-        {
-            fullUrl += "?" + string.Join("&", queryParams);
-        }
-
-        var builder = new HubConnectionBuilder()
-            .WithUrl(fullUrl, options =>
-            {
-                if (!string.IsNullOrEmpty(_token))
-                {
-                    options.AccessTokenProvider = () => Task.FromResult<string?>(_token);
-                }
-
-                if (!string.IsNullOrEmpty(_apiKey))
-                {
-                    options.Headers.Add("X-API-KEY", _apiKey);
-                }
-            })
-            .WithAutomaticReconnect();
-
-        _connection = builder.Build();
-
-        _connection.On<HaciendaEnvioIniciadoEvent>("HaciendaEnvioIniciado", (e) => OnEnvioIniciado?.Invoke(e));
-        _connection.On<HaciendaRespuestaRecibidaEvent>("HaciendaRespuestaRecibida", (e) => OnRespuestaRecibida?.Invoke(e));
-        _connection.On<SystemNotificationDto>("ReceiveNotification", (n) => OnNotificationReceived?.Invoke(n));
-
-        _connection.Closed += (exception) =>
-        {
-            OnRealtimeClosed?.Invoke(exception);
-            return Task.CompletedTask;
-        };
-
-        await _connection.StartAsync();
-    }
-
-    /// <summary>
-    /// Detiene la conexión en tiempo real.
-    /// </summary>
-    public async Task StopRealtimeAsync()
-    {
-        if (_connection != null)
-        {
-            await _connection.StopAsync();
-        }
-    }
-
-    #endregion
-
     /// <summary>
     /// Ejecuta el proceso de 'Backfill' masivo de reportes en el backend.
     /// </summary>
@@ -829,12 +982,12 @@ public class SaeClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_connection != null)
-        {
-            await _connection.DisposeAsync();
-        }
+        if (_haciendaConnection != null) await _haciendaConnection.DisposeAsync();
+        if (_appConnection != null) await _appConnection.DisposeAsync();
         _http.Dispose();
     }
+
+    #endregion
 
     #region License Addons
 
@@ -1032,4 +1185,59 @@ public class SaeClient : IAsyncDisposable
     }
 
     #endregion
+
+    #region Backups
+
+    /// <summary>
+    /// Obtiene la configuración de respaldos del establecimiento.
+    /// </summary>
+    public async Task<BackupConfigDto> GetBackupConfigAsync(CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync("v1/backups/config", ct);
+        var wrapper = await HandleResponseAsync<BackupApiWrapper<BackupConfigDto>>(response);
+        return wrapper.Resultado ?? new BackupConfigDto();
+    }
+
+    /// <summary>
+    /// Obtiene el historial de respaldos del establecimiento.
+    /// </summary>
+    public async Task<List<BackupHistoryDto>> GetBackupHistoryAsync(CancellationToken ct = default)
+    {
+        var response = await _http.GetAsync("v1/backups/history", ct);
+        var wrapper = await HandleResponseAsync<BackupApiWrapper<List<BackupHistoryDto>>>(response);
+        return wrapper.Resultado ?? new List<BackupHistoryDto>();
+    }
+
+    /// <summary>
+    /// Sube un archivo de respaldo al servidor SAE para su distribución a los proveedores de nube configurados.
+    /// </summary>
+    public async Task<BackupExecutionRespuesta> UploadBackupAsync(
+        byte[] fileBytes,
+        string fileName,
+        string? checksum = null,
+        bool esAuto = true,
+        CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(fileBytes);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        content.Add(fileContent, "file", fileName);
+        content.Add(new StringContent(esAuto.ToString().ToLower()), "esAuto");
+        if (!string.IsNullOrEmpty(checksum))
+            content.Add(new StringContent(checksum), "checksum");
+
+        var response = await _http.PostAsync("v1/backups/upload", content, ct);
+        var wrapper = await HandleResponseAsync<BackupApiWrapper<BackupExecutionRespuesta>>(response);
+        return wrapper.Resultado ?? new BackupExecutionRespuesta { Success = false };
+    }
+
+    #endregion
+}
+
+/// <summary>Internal helper to unwrap SAE API envelope responses.</summary>
+internal class BackupApiWrapper<T>
+{
+    public bool Error { get; set; }
+    public string? Message { get; set; }
+    public T? Resultado { get; set; }
 }

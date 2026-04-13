@@ -127,7 +127,7 @@ public class TiqueteBuilder
 
         var totalComprobante = totalVenta + totalImpuesto;
 
-        var consecutivoReq = new ConsecutivoRequest(_establecimiento, _terminal, _consecutivo, _tipoDocumento);
+        var consecutivoReq = new ConsecutivoRequest(_establecimiento, _terminal, _consecutivo);
 
         var claveReq = new ClaveRequest(
             _codigoPais,
