@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    
+    <!-- NuGet Metadata -->
+    <PackageId>CR.SAE.SDK</PackageId>
+    <Version>4.0.0</Version>
+    <Authors>EskenderDev</Authors>
+    <Company>EskenderDev</Company>
+    <Copyright>Copyright © 2026 EskenderDev</Copyright>
+    <Description>SDK C# v4 (Runtime God Mode) para interactuar con la plataforma SAE. Agente inteligente distribuido con pipeline de middlewares, resiliencia y observabilidad.</Description>
+    <PackageProjectUrl>https://github.com/EskenderDev/SAE_SDKs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/EskenderDev/SAE_SDKs</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>hacienda;costarica;factura-electronica;sae;sdk;signalr;runtime;god-mode</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Identity\**" />
+    <None Include="Identity\**" />
+    <Compile Remove="VerificationApp\**" />
+    <None Include="VerificationApp\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Polly" Version="8.5.0" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Identity\Sae.Identity.Client.csproj" />
+  </ItemGroup>
+
+</Project>

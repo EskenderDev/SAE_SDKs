@@ -1,0 +1,77 @@
+using System;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using SAE.Sdk.Client;
+using SAE.Identity.Client;
+
+Console.WriteLine("=== SAE SDK V2 Verification App ===");
+
+// 1. Mock Token Provider
+var mockTokenProvider = new MockTokenProvider("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.Et9z_o9.fake_token");
+
+// 2. Setup HttpClient with logging handler to inspect headers
+var loggingHandler = new InspectHeadersHandler();
+var client = new SaeClient(mockTokenProvider, "https://api.saesystem.local", new HttpClient(loggingHandler));
+
+Console.WriteLine("\n[1] Testing API Call with automatic DPoP and Fingerprinting...");
+
+try 
+{
+    // This call won't actually succeed (fake URL), but we want to see the headers in the InspectHeadersHandler
+    await client.GetAsync<object>("v1/orders");
+}
+catch (Exception ex)
+{
+    // Ignore network errors, we just want the logs
+}
+
+Console.WriteLine("\n[2] Verifying Headers captured by the interceptor:");
+foreach (var header in loggingHandler.CapturedHeaders)
+{
+    Console.WriteLine($"{header.Key}: {header.Value}");
+}
+
+Console.WriteLine("\n[3] Verification Summary:");
+bool hasAuth = loggingHandler.CapturedHeaders.ContainsKey("Authorization");
+bool hasDpop = loggingHandler.CapturedHeaders.ContainsKey("DPoP");
+bool hasFingerprint = loggingHandler.CapturedHeaders.ContainsKey("X-SAE-Device-Fingerprint");
+
+if (hasAuth && hasDpop && hasFingerprint)
+{
+    Console.WriteLine("✅ SUCCESS: All identity headers (Bearer, DPoP, Fingerprint) are present.");
+}
+else
+{
+    Console.WriteLine("❌ FAILED: Missing headers.");
+}
+
+// --- Helper Classes ---
+
+public class MockTokenProvider : ITokenProvider
+{
+    private readonly string _token;
+    public MockTokenProvider(string token) => _token = token;
+    public Task<string> GetAccessTokenAsync(CancellationToken ct = default) => Task.FromResult(_token);
+}
+
+public class InspectHeadersHandler : DelegatingHandler
+{
+    public Dictionary<string, string> CapturedHeaders { get; } = new();
+
+    public InspectHeadersHandler() : base(new HttpClientHandler()) { }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        foreach (var header in request.Headers)
+        {
+            CapturedHeaders[header.Key] = string.Join(", ", header.Value);
+        }
+
+        // Return a mock response to avoid real network calls
+        return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"status\":\"ok\"}")
+        };
+    }
+}

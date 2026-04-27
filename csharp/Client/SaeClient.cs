@@ -1,8 +1,14 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using SAE.Sdk.Models;
+using SAE.Identity.Client;
+using System.Net;
 using System.Net.Http.Json;
+using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Net.Http.Headers;
 
 namespace SAE.Sdk.Client;
 
@@ -17,9 +23,9 @@ public class SaeClient : IAsyncDisposable
     public string BaseUrl => _baseUrl;
     private readonly string _haciendaHubUrl;
     private readonly string _appHubUrl;
-    private string? _token;
-    private string? _apiKey;
+    private readonly ITokenProvider _tokenProvider;
     private string? _tenantId;
+    private readonly SaeClientOptions _options;
 
     // SignalR
     private HubConnection? _haciendaConnection;
@@ -69,30 +75,125 @@ public class SaeClient : IAsyncDisposable
     public event Action<Exception?>? OnAppRealtimeClosed;
 
     /// <summary>
-    /// Inicializa una nueva instancia del cliente SAE.
+    /// Inicializa una nueva instancia del cliente SAE v2.
     /// </summary>
-    /// <param name="baseUrl">URL base del servicio (ej: https://api.tu-servicio.com)</param>
+    /// <param name="tokenProvider">Proveedor de tokens de identidad</param>
+    /// <param name="baseUrl">URL base del servicio</param>
     /// <param name="httpClient">Opcional: HttpClient personalizado</param>
-    public SaeClient(string baseUrl = "https://localhost:5000", HttpClient? httpClient = null)
+    public SaeClient(ITokenProvider tokenProvider, string baseUrl = "https://localhost:5000", HttpClient? httpClient = null)
     {
+        _tokenProvider = tokenProvider;
         _baseUrl = baseUrl.TrimEnd('/');
         _haciendaHubUrl = _baseUrl + "/hubs/hacienda";
         _appHubUrl = _baseUrl + "/hubs/app";
+        _options = SaeClientOptions.ProductionDefaults();
 
         var restBaseUrl = _baseUrl.EndsWith("/api") ? _baseUrl + "/" : _baseUrl + "/api/";
-        _http = httpClient ?? new HttpClient { BaseAddress = new Uri(restBaseUrl) };
+        _http = CreateHttpClientWithOptions(_options, restBaseUrl, httpClient);
     }
 
-    #region Authentication
+    /// <summary>
+    /// Inicializa una nueva instancia del cliente SAE v2 con opciones avanzadas.
+    /// </summary>
+    /// <param name="tokenProvider">Proveedor de tokens de identidad</param>
+    /// <param name="baseUrl">URL base del servicio</param>
+    /// <param name="configureOptions">Action para configurar las opciones del cliente</param>
+    /// <param name="httpClient">Opcional: HttpClient personalizado</param>
+    public SaeClient(ITokenProvider tokenProvider, string baseUrl, Action<SaeClientOptions> configureOptions, HttpClient? httpClient = null)
+    {
+        _tokenProvider = tokenProvider;
+        var sanitizedUrl = baseUrl.TrimEnd('/');
+        
+        // 🔥 AUTO-FIX: Si es el puerto 5001, forzar HTTPS (el servidor local solo escucha HTTPS en ese puerto)
+        if (sanitizedUrl.Contains(":5001") && sanitizedUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            sanitizedUrl = "https://" + sanitizedUrl.Substring("http://".Length);
+        }
+        
+        _baseUrl = sanitizedUrl;
+        _haciendaHubUrl = _baseUrl + "/hubs/hacienda";
+        _appHubUrl = _baseUrl + "/hubs/app";
+        
+        _options = SaeClientOptions.ProductionDefaults();
+        configureOptions(_options);
+
+        var restBaseUrl = _baseUrl.EndsWith("/api") ? _baseUrl + "/" : _baseUrl + "/api/";
+        _http = CreateHttpClientWithOptions(_options, restBaseUrl, httpClient);
+    }
+
+    /// <summary>
+    /// Crea un HttpClient configurado según las opciones proporcionadas.
+    /// </summary>
+    private HttpClient CreateHttpClientWithOptions(SaeClientOptions options, string baseUrl, HttpClient? customClient = null)
+    {
+        var handler = CreateDefaultHandler(options);
+        var authHandler = new SaeAuthenticationHandler(_tokenProvider, handler);
+
+        var client = new HttpClient(authHandler)
+        {
+            BaseAddress = new Uri(baseUrl),
+            Timeout = options.Timeout
+        };
+
+        if (options.SkipCertificateValidation)
+        {
+            client.DefaultRequestVersion = HttpVersion.Version11;
+            client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
+        }
+
+        return client;
+    }
+
+    private HttpMessageHandler CreateDefaultHandler(SaeClientOptions options)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = options.SkipCertificateValidation ? TimeSpan.Zero : options.PooledConnectionLifetime,
+            PooledConnectionIdleTimeout = options.SkipCertificateValidation ? TimeSpan.Zero : TimeSpan.FromMinutes(2),
+            MaxConnectionsPerServer = options.MaxConnectionsPerServer,
+            EnableMultipleHttp2Connections = !options.SkipCertificateValidation,
+            AllowAutoRedirect = options.AllowAutoRedirect,
+            MaxAutomaticRedirections = options.MaxAutomaticRedirections,
+            ConnectTimeout = options.SkipCertificateValidation ? TimeSpan.FromSeconds(10) : options.Timeout,
+            KeepAlivePingDelay = options.EnableKeepAlive ? TimeSpan.FromSeconds(60) : TimeSpan.FromMilliseconds(-1),
+            KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
+            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
+        };
+
+        handler.SslOptions.EnabledSslProtocols = options.MinSslProtocol;
+        
+        if (options.ClientCertificate != null)
+        {
+            handler.SslOptions.ClientCertificates = new X509CertificateCollection { options.ClientCertificate };
+        }
+
+        if (options.SkipCertificateValidation)
+        {
+            handler.SslOptions.RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+        }
+        else if (options.CustomCertificateValidation != null)
+        {
+            handler.SslOptions.RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) =>
+            {
+                if (certificate is X509Certificate2 cert2)
+                {
+                    return options.CustomCertificateValidation(cert2, chain ?? new X509Chain(), sslPolicyErrors);
+                }
+                return sslPolicyErrors == SslPolicyErrors.None;
+            };
+        }
+
+        return handler;
+    }
+
+    #region Authentication (v2 Identity)
 
     /// <summary>
     /// Establece el token de autenticación manualmente.
     /// </summary>
+    [Obsolete("Use ITokenProvider injected in constructor.")]
     public void SetToken(string token)
     {
-        _token = token;
-        _apiKey = null;
-        _http.DefaultRequestHeaders.Remove("X-API-KEY");
         _http.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
     }
@@ -100,11 +201,9 @@ public class SaeClient : IAsyncDisposable
     /// <summary>
     /// Establece el API Key para autenticación.
     /// </summary>
+    [Obsolete("API Key authentication is deprecated. Use OAuth2 via ITokenProvider.")]
     public void SetApiKey(string apiKey)
     {
-        _apiKey = apiKey;
-        _token = null;
-        _http.DefaultRequestHeaders.Authorization = null;
         if (_http.DefaultRequestHeaders.Contains("X-API-KEY"))
         {
             _http.DefaultRequestHeaders.Remove("X-API-KEY");
@@ -139,28 +238,115 @@ public class SaeClient : IAsyncDisposable
     /// <summary>
     /// Inicia sesión y obtiene el token de acceso.
     /// </summary>
-    public async Task<string> LoginAsync(string email, string password)
+    [Obsolete("Use Identity SDK (Sae.Identity.Client) to handle authentication.")]
+    public async Task<string> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PostAsJsonAsync("auth/login", new { email, password });
+        var response = await _http.PostAsJsonAsync("v1/auth/login", new { email, password }, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        var result = await response.Content.ReadFromJsonAsync<LoginResult>();
-        if (result == null || string.IsNullOrEmpty(result.Token))
-        {
-            throw new Exception("La respuesta de login no contenía un token válido.");
-        }
-
-        SetToken(result.Token);
-        return result.Token;
+        var loginResult = await response.Content.ReadFromJsonAsync<LoginResult>(cancellationToken);
+        return loginResult!.Token ?? loginResult.AccessToken!;
     }
 
     /// <summary>
-    /// Registra un nuevo tenant/usuario en la plataforma.
+    /// Obtiene opciones para registro de Passkey (WebAuthn).
+    /// </summary>
+    public async Task<WebAuthnOptionsResponse> GetWebAuthnRegisterOptionsAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsJsonAsync("v1/auth/passkey/register-options", new { email }, cancellationToken);
+        return await HandleResponseAsync<WebAuthnOptionsResponse>(response);
+    }
+
+    /// <summary>
+    /// Completa el registro de una Passkey.
+    /// </summary>
+    public async Task CompleteWebAuthnRegisterAsync(WebAuthnRegistrationRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsJsonAsync("v1/auth/passkey/register", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>
+    /// Obtiene opciones para inicio de sesión con Passkey (WebAuthn).
+    /// </summary>
+    public async Task<WebAuthnOptionsResponse> GetWebAuthnLoginOptionsAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsJsonAsync("v1/auth/passkey/login-options", new { email }, cancellationToken);
+        return await HandleResponseAsync<WebAuthnOptionsResponse>(response);
+    }
+
+    /// <summary>
+    /// Inicia sesión utilizando una Passkey.
+    /// </summary>
+    public async Task<LoginResult> CompleteWebAuthnLoginAsync(WebAuthnLoginRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsJsonAsync("v1/auth/passkey/login", request, cancellationToken);
+        var result = await HandleResponseAsync<LoginResult>(response);
+        
+        if (string.IsNullOrEmpty(result.Token) && !string.IsNullOrEmpty(result.AccessToken))
+        {
+            result.Token = result.AccessToken;
+        }
+
+        if (!string.IsNullOrEmpty(result.Token))
+        {
+            SetToken(result.Token);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Obtiene la lista de aprobaciones pendientes (Suscripciones, Addons, Pagos).
+    /// </summary>
+    public async Task<List<PendingApprovalDto>> AdminGetPendingApprovalsAsync()
+    {
+        var response = await _http.GetAsync("v1/admin/approvals/pending");
+        return await HandleResponseAsync<List<PendingApprovalDto>>(response);
+    }
+
+    /// <summary>
+    /// Aprueba una solicitud o pedido pendiente.
+    /// </summary>
+    public async Task AdminApproveApprovalAsync(Guid id, int type, ApproveRequest request)
+    {
+        var response = await _http.PostAsJsonAsync($"v1/admin/approvals/{id}/{type}/approve", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error aprobando: {response.StatusCode} - {error}");
+        }
+    }
+
+    /// <summary>
+    /// Rechaza una solicitud o pedido pendiente.
+    /// </summary>
+    public async Task AdminRejectApprovalAsync(Guid id, int type, ApprovalRejectRequest request)
+    {
+        var response = await _http.PostAsJsonAsync($"v1/admin/approvals/{id}/{type}/reject", request);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException($"Error rechazando: {response.StatusCode} - {error}");
+        }
+    }
+
+    /// <summary>
+    /// Registra un nuevo tenant/usuario en la plataforma (Crea cuenta + Organización).
     /// </summary>
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
-        var response = await _http.PostAsJsonAsync("auth/register", request);
+        var response = await _http.PostAsJsonAsync("v1/auth/register", request);
         return await HandleResponseAsync<AuthResponse>(response);
+    }
+
+    /// <summary>
+    /// Registra una nueva organización para el usuario actual (Sub-tenants).
+    /// </summary>
+    public async Task<TenantResponse> RegisterTenantAsync(RegisterTenantRequest request)
+    {
+        var response = await _http.PostAsJsonAsync("tenants/register", request);
+        return await HandleResponseAsync<TenantResponse>(response);
     }
 
     /// <summary>
@@ -168,7 +354,7 @@ public class SaeClient : IAsyncDisposable
     /// </summary>
     public async Task<string> AdminLoginAsync(string email, string password)
     {
-        var response = await _http.PostAsJsonAsync("admin/auth/login", new { email, password });
+        var response = await _http.PostAsJsonAsync("v1/admin/auth/login", new { email, password });
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<LoginResult>();
@@ -188,7 +374,7 @@ public class SaeClient : IAsyncDisposable
     /// <param name="isAdmin">Indica si es para la plataforma de administración</param>
     public async Task<PasswordResetResponse> ForgotPasswordAsync(string email, bool isAdmin = false)
     {
-        var endpoint = isAdmin ? "admin/auth/forgot-password" : "auth/forgot-password";
+        var endpoint = isAdmin ? "v1/admin/auth/forgot-password" : "v1/auth/forgot-password";
         var response = await _http.PostAsJsonAsync(endpoint, new ForgotPasswordRequest(email));
         return await HandleResponseAsync<PasswordResetResponse>(response);
     }
@@ -198,7 +384,7 @@ public class SaeClient : IAsyncDisposable
     /// </summary>
     public async Task<PasswordResetResponse> ResetPasswordAsync(string token, string newPassword, bool isAdmin = false)
     {
-        var endpoint = isAdmin ? "admin/auth/reset-password" : "auth/reset-password";
+        var endpoint = isAdmin ? "v1/admin/auth/reset-password" : "v1/auth/reset-password";
         var response = await _http.PostAsJsonAsync(endpoint, new ResetPasswordRequest(token, newPassword));
         return await HandleResponseAsync<PasswordResetResponse>(response);
     }
@@ -211,11 +397,14 @@ public class SaeClient : IAsyncDisposable
     /// Verifica la salud de la plataforma.
     /// </summary>
     /// <returns>True si la plataforma está saludable, false en caso contrario.</returns>
-    public async Task<bool> CheckHealthAsync()
+    public async Task<bool> CheckHealthAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var response = await _http.GetAsync("../health");
+            var response = await ExecuteWithRetryAsync(
+                () => _http.GetAsync("../health", cancellationToken),
+                "CheckHealth",
+                cancellationToken);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -265,7 +454,7 @@ public class SaeClient : IAsyncDisposable
     /// </summary>
     public async Task<TenantResponse> GetCurrentTenantAsync()
     {
-        var response = await _http.GetAsync("tenants/current");
+        var response = await _http.GetAsync("v1/tenants/current");
         return await HandleResponseAsync<TenantResponse>(response);
     }
 
@@ -274,7 +463,7 @@ public class SaeClient : IAsyncDisposable
     /// </summary>
     public async Task<TenantResponse> UpdateCurrentTenantAsync(UpdateTenantRequest request)
     {
-        var response = await _http.PutAsJsonAsync("tenants/current", request);
+        var response = await _http.PutAsJsonAsync("v1/tenants/current", request);
         return await HandleResponseAsync<TenantResponse>(response);
     }
 
@@ -283,7 +472,7 @@ public class SaeClient : IAsyncDisposable
     /// </summary>
     public async Task<List<BranchDto>> GetBranchesAsync()
     {
-        var response = await _http.GetAsync("branches");
+        var response = await _http.GetAsync("v1/branches");
         return await HandleResponseAsync<List<BranchDto>>(response);
     }
 
@@ -292,7 +481,7 @@ public class SaeClient : IAsyncDisposable
     /// </summary>
     public async Task<List<TerminalDto>> GetTerminalsAsync(Guid branchId)
     {
-        var response = await _http.GetAsync($"terminals?branchId={branchId}");
+        var response = await _http.GetAsync($"v1/terminals?branchId={branchId}");
         return await HandleResponseAsync<List<TerminalDto>>(response);
     }
 
@@ -872,8 +1061,9 @@ public class SaeClient : IAsyncDisposable
         var fullUrl = hubUrl;
         var queryParams = new List<string>();
 
-        if (!string.IsNullOrEmpty(_tenantId)) queryParams.Add($"tenantId={Uri.EscapeDataString(_tenantId)}");
-        if (!string.IsNullOrEmpty(_apiKey)) queryParams.Add($"apiKey={Uri.EscapeDataString(_apiKey)}");
+        // Solo tenantId en query para SuperAdmin impersonation
+        if (!string.IsNullOrEmpty(_tenantId)) 
+            queryParams.Add($"tenantId={Uri.EscapeDataString(_tenantId)}");
 
         if (queryParams.Count > 0)
         {
@@ -883,15 +1073,29 @@ public class SaeClient : IAsyncDisposable
         return new HubConnectionBuilder()
             .WithUrl(fullUrl, options =>
             {
-                if (!string.IsNullOrEmpty(_token))
+                if (_options.SkipCertificateValidation)
                 {
-                    options.AccessTokenProvider = () => Task.FromResult<string?>(_token);
+                    options.HttpMessageHandlerFactory = handler =>
+                    {
+                        if (handler is HttpClientHandler clientHandler)
+                        {
+                            clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+                        }
+                        
+                        // Si es SocketsHttpHandler (común en .NET Core/.NET 5+), deshabilitamos HTTP/2 agresivamente
+                        if (handler is SocketsHttpHandler socketsHandler)
+                        {
+                            socketsHandler.EnableMultipleHttp2Connections = false;
+                            socketsHandler.PooledConnectionIdleTimeout = TimeSpan.Zero;
+                            socketsHandler.PooledConnectionLifetime = TimeSpan.Zero;
+                        }
+                        
+                        return handler;
+                    };
                 }
 
-                if (!string.IsNullOrEmpty(_apiKey))
-                {
-                    options.Headers.Add("X-API-KEY", _apiKey);
-                }
+                // JWT token - usar AccessTokenProvider para SignalR negotiate
+                options.AccessTokenProvider = async () => await _tokenProvider.GetAccessTokenAsync();
             })
             .WithAutomaticReconnect()
             .Build();
@@ -908,6 +1112,206 @@ public class SaeClient : IAsyncDisposable
 
     [Obsolete("Use StartHaciendaRealtimeAsync")]
     public Task StartRealtimeAsync() => StartHaciendaRealtimeAsync();
+
+    #endregion
+
+    #region Retry Logic
+
+    /// <summary>
+    /// Determina si un error de HTTP es retentable (5xx, timeout, etc.).
+    /// </summary>
+    private static bool IsRetryableError(HttpResponseMessage? response, Exception? exception)
+    {
+        // Errores de red/timeout son retentables
+        if (exception is HttpRequestException || exception is TaskCanceledException || exception is TimeoutException)
+            return true;
+
+        // Errores 5xx son retentables
+        if (response != null && (int)response.StatusCode >= 500 && (int)response.StatusCode < 600)
+            return true;
+
+        // 429 Too Many Requests es retentable
+        if (response != null && response.StatusCode == HttpStatusCode.TooManyRequests)
+            return true;
+
+        // 408 Request Timeout es retentable
+        if (response != null && response.StatusCode == HttpStatusCode.RequestTimeout)
+            return true;
+
+        // 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout son retentables
+        if (response != null && (response.StatusCode == HttpStatusCode.BadGateway ||
+                                  response.StatusCode == HttpStatusCode.ServiceUnavailable ||
+                                  response.StatusCode == HttpStatusCode.GatewayTimeout))
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Calcula el delay para el siguiente reintento usando backoff exponencial con jitter.
+    /// </summary>
+    private TimeSpan CalculateRetryDelay(int attempt)
+    {
+        // Backoff exponencial: delay * (multiplier ^ attempt)
+        var exponentialDelay = _options.RetryDelay.TotalMilliseconds * Math.Pow(_options.BackoffMultiplier, attempt);
+        
+        // Agregar jitter aleatorio (±25%) para evitar thundering herd
+        var jitter = exponentialDelay * 0.25 * (Random.Shared.NextDouble() * 2 - 1);
+        var finalDelay = exponentialDelay + jitter;
+        
+        return TimeSpan.FromMilliseconds(Math.Max(finalDelay, 100)); // Mínimo 100ms
+    }
+
+    /// <summary>
+    /// Loguea un evento si el callback está configurado.
+    /// </summary>
+    private void Log(SaeLogLevel level, string message, string? operation = null, int? retryAttempt = null, Exception? exception = null, TimeSpan? duration = null)
+    {
+        _options.LogCallback?.Invoke(new SaeClientLogEvent
+        {
+            Level = level,
+            Message = message,
+            Operation = operation,
+            RetryAttempt = retryAttempt,
+            Exception = exception,
+            Duration = duration
+        });
+    }
+
+    /// <summary>
+    /// Ejecuta una operación HTTP con reintentos automáticos.
+    /// </summary>
+    private async Task<T> ExecuteWithRetryAsync<T>(Func<Task<T>> operation, string operationName, CancellationToken cancellationToken = default)
+    {
+        var startTime = DateTime.UtcNow;
+        Exception? lastException = null;
+        HttpResponseMessage? lastResponse = null;
+
+        for (int attempt = 0; attempt <= _options.MaxRetries; attempt++)
+        {
+            try
+            {
+                Log(SaeLogLevel.Debug, $"Iniciando {operationName}", operationName, attempt > 0 ? attempt : null);
+                
+                var result = await operation();
+                
+                var duration = DateTime.UtcNow - startTime;
+                Log(SaeLogLevel.Debug, $"{operationName} completado exitosamente", operationName, attempt > 0 ? attempt : null, duration: duration);
+                
+                return result;
+            }
+            catch (HttpRequestException ex) when (IsRetryableError(null, ex) && attempt < _options.MaxRetries)
+            {
+                lastException = ex;
+                var delay = CalculateRetryDelay(attempt);
+                
+                Log(SaeLogLevel.Warning, $"{operationName} falló (intento {attempt + 1}/{_options.MaxRetries + 1}): {ex.Message}. Reintentando en {delay.TotalMilliseconds:F0}ms...", 
+                    operationName, attempt + 1, ex);
+                
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested && attempt < _options.MaxRetries)
+            {
+                // Timeout, no cancelación del token
+                lastException = ex;
+                var delay = CalculateRetryDelay(attempt);
+                
+                Log(SaeLogLevel.Warning, $"{operationName} timeout (intento {attempt + 1}/{_options.MaxRetries + 1}). Reintentando en {delay.TotalMilliseconds:F0}ms...", 
+                    operationName, attempt + 1, ex);
+                
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (Exception ex) when (IsRetryableError(null, ex) && attempt < _options.MaxRetries)
+            {
+                lastException = ex;
+                var delay = CalculateRetryDelay(attempt);
+                
+                Log(SaeLogLevel.Warning, $"{operationName} error retentable (intento {attempt + 1}/{_options.MaxRetries + 1}): {ex.Message}. Reintentando en {delay.TotalMilliseconds:F0}ms...", 
+                    operationName, attempt + 1, ex);
+                
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+
+        // Si llegamos aquí, agotamos los reintentos
+        var totalDuration = DateTime.UtcNow - startTime;
+        Log(SaeLogLevel.Error, $"{operationName} falló después de {_options.MaxRetries + 1} intentos", operationName, null, lastException, totalDuration);
+        
+        throw new SaeClientException($"{operationName} falló después de {_options.MaxRetries + 1} intentos. Último error: {lastException?.Message}", 
+            lastException, _options.MaxRetries + 1);
+    }
+
+    #endregion
+
+    #region HTTP Helpers with Retry
+
+    /// <summary>
+    /// Realiza una petición GET con retry automático.
+    /// </summary>
+    public async Task<T> GetAsync<T>(string url, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteWithRetryAsync(async () =>
+        {
+            var response = await _http.GetAsync(url, cancellationToken);
+            return await HandleResponseAsync<T>(response);
+        }, $"GET {url}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Realiza una petición POST con retry automático.
+    /// </summary>
+    public async Task<T> PostAsync<T>(string url, object? content, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteWithRetryAsync(async () =>
+        {
+            var response = await _http.PostAsJsonAsync(url, content, cancellationToken);
+            return await HandleResponseAsync<T>(response);
+        }, $"POST {url}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Realiza una petición PUT con retry automático.
+    /// </summary>
+    public async Task<T> PutAsync<T>(string url, object? content, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteWithRetryAsync(async () =>
+        {
+            var response = await _http.PutAsJsonAsync(url, content, cancellationToken);
+            return await HandleResponseAsync<T>(response);
+        }, $"PUT {url}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Realiza una petición DELETE con retry automático.
+    /// </summary>
+    public async Task<T> DeleteAsync<T>(string url, CancellationToken cancellationToken = default)
+    {
+        return await ExecuteWithRetryAsync(async () =>
+        {
+            var response = await _http.DeleteAsync(url, cancellationToken);
+            return await HandleResponseAsync<T>(response);
+        }, $"DELETE {url}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Realiza una petición POST sin cuerpo de respuesta esperado, con retry automático.
+    /// </summary>
+    private async Task PostVoidAsync(string url, object? content = null, CancellationToken cancellationToken = default)
+    {
+        await ExecuteWithRetryAsync(async () =>
+        {
+            var response = content != null 
+                ? await _http.PostAsJsonAsync(url, content, cancellationToken)
+                : await _http.PostAsync(url, null, cancellationToken);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException($"Error SAE API: {response.StatusCode} - {error}");
+            }
+            return response;
+        }, $"POST {url}", cancellationToken);
+    }
 
     #endregion
 

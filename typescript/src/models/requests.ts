@@ -344,6 +344,16 @@ export interface LoginRequest {
     rememberMe?: boolean;
 }
 
+export interface PasskeyRegisterRequest {
+    userId: string;
+    attestation: any;
+}
+
+export interface PasskeyLoginRequest {
+    userId?: string;
+    assertion: any;
+}
+
 export interface ForgotPasswordRequest {
     email: string;
 }
@@ -473,6 +483,7 @@ export interface CreateLicensePackageRequest {
     defaultModules?: string | null;
     iconUrl?: string | null;
     appIdentifier?: string | null;
+    requiresIsolation?: boolean;
 }
 
 export interface UpdateLicensePackageRequest {
@@ -488,6 +499,7 @@ export interface UpdateLicensePackageRequest {
     defaultModules?: string | null;
     iconUrl?: string | null;
     appIdentifier?: string | null;
+    requiresIsolation?: boolean;
 }
 
 export interface RegisterAppRequest {
@@ -594,4 +606,10 @@ export interface UpdateDeveloperModuleRequest {
     type?: number;
     isActive?: boolean;
     appIdentifier?: string | null;
+}
+
+export interface ApproveRequest {
+    note?: string;
+    overrideTenantId?: string;
+    paymentMethod?: number;
 }

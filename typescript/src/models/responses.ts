@@ -12,7 +12,19 @@ export interface LoginResult {
     refreshToken?: string;
     tenantId?: string;
     requiresActivation?: boolean;
+    requiresSetup?: boolean;
+    requiresMfa?: boolean;
+    expiresIn?: number;
     message?: string;
+}
+
+export interface PasskeyOptionsResponse {
+    publicKey: any; // CredentialCreationOptions or CredentialRequestOptions
+    userHandle?: string;
+}
+
+export interface PasskeyVerificationResponse extends LoginResult {
+    success: boolean;
 }
 
 export interface PasswordResetResponse {
@@ -239,6 +251,7 @@ export interface LicensePackageResponse {
     isPlatformPackage: boolean;
     tenantId?: string;
     tenantName?: string;
+    requiresIsolation: boolean;
 }
 
 export interface LicenseAddonResponse {
@@ -591,6 +604,7 @@ export interface PublicPlan {
     billingPeriod: string;
     features: string[];
     isPopular: boolean;
+    requiresIsolation: boolean;
 }
 
 export interface PendingApprovalItemDto {

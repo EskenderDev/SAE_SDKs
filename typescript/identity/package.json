@@ -1,0 +1,14 @@
+{
+  "name": "@sae/identity",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Identity Client for SAE Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

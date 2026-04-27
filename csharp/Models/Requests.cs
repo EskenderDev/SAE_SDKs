@@ -467,6 +467,13 @@ public class TenantResponse
     public string? EconomicActivityCode { get; set; }
 }
 
+public class RegisterTenantRequest
+{
+    [Required] public string Name { get; set; } = string.Empty;
+    [Required] public string TaxId { get; set; } = string.Empty;
+    public string? OwnerEmail { get; set; }
+}
+
 public class RegisterRequest
 {
     [Required] public string CompanyName { get; set; } = string.Empty;
@@ -479,15 +486,32 @@ public class RegisterRequest
 public class AuthResponse
 {
     public string Token { get; set; } = string.Empty;
+    public string AccessToken { get; set; } = string.Empty;
     public DateTime Expiration { get; set; }
+    public int ExpiresIn { get; set; }
     public string RefreshToken { get; set; } = string.Empty;
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
     public Guid? TenantId { get; set; }
     public bool RequiresActivation { get; set; }
+    public bool RequiresSetup { get; set; }
+    public bool RequiresMfa { get; set; }
 }
 
-public record LoginResult { public string Token { get; set; } = string.Empty; }
+public record WebAuthnOptionsResponse(object PublicKey, string? UserHandle);
+public record WebAuthnRegistrationRequest(string UserId, object Attestation);
+public record WebAuthnLoginRequest(string? UserId, object Assertion);
+
+public record LoginResult 
+{ 
+    public string Token { get; set; } = string.Empty; 
+    public string AccessToken { get; set; } = string.Empty;
+    public string RefreshToken { get; set; } = string.Empty;
+    public int ExpiresIn { get; set; }
+    public bool RequiresSetup { get; set; }
+    public bool RequiresMfa { get; set; }
+    public bool RequiresActivation { get; set; }
+}
 public record DocumentoResult { public string XmlFirmado { get; set; } = string.Empty; public string Clave { get; set; } = string.Empty; }
 
 // Auth & Management
@@ -666,4 +690,16 @@ public record EnqueueNotificationRequest(
 public record UnreadNotificationsResponse(
     int Count, 
     List<SystemNotificationDto> Items);
+
+public class ApproveRequest
+{
+    public string? Note { get; set; }
+    public Guid? OverrideTenantId { get; set; }
+    public PaymentMethod? PaymentMethod { get; set; }
+}
+
+public class ApprovalRejectRequest
+{
+    public string Reason { get; set; } = string.Empty;
+}
 

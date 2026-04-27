@@ -1,0 +1,13 @@
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\bin\Debug\net8.0\SAE.Identity.Client.deps.json
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\bin\Debug\net8.0\SAE.Identity.Client.dll
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\bin\Debug\net8.0\SAE.Identity.Client.pdb
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\Sae.Identity.Client.csproj.AssemblyReference.cache
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\Sae.Identity.Client.GeneratedMSBuildEditorConfig.editorconfig
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\Sae.Identity.Client.AssemblyInfoInputs.cache
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\Sae.Identity.Client.AssemblyInfo.cs
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\Sae.Identity.Client.csproj.CoreCompileInputs.cache
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\Sae.Identity.Client.sourcelink.json
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\SAE.Identity.Client.dll
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\refint\SAE.Identity.Client.dll
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\SAE.Identity.Client.pdb
+D:\Proyectos\SAE PLATFORM\SAE_SDKs\csharp\Identity\obj\Debug\net8.0\ref\SAE.Identity.Client.dll

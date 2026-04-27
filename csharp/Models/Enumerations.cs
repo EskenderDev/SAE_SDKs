@@ -521,6 +521,21 @@ public static class CodigoMonedaExtension
     };
 }
 
+/// <summary>Método de Pago para suscripciones</summary>
+public enum PaymentMethod
+{
+    SinpeMovil = 0,
+    BankTransfer = 1,
+    Other = 2
+}
+
+/// <summary>Tipo de objeto a aprobar</summary>
+public enum ApprovalType
+{
+    Request = 1,
+    Order = 2
+}
+
 /// <summary>Código de Impuesto (Códigos Hacienda)</summary>
 public enum CodigoImpuesto
 {
