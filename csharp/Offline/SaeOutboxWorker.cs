@@ -1,24 +1,22 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using SAE.Sdk.Client;
 
 namespace SAE.Sdk.Offline;
 
 public class SaeOutboxWorker : BackgroundService
 {
-    private readonly ISaeOutboxRepository _repo;
-    private readonly SaeRuntime _runtime;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConnectivityService _connectivity;
     private readonly ILogger<SaeOutboxWorker> _logger;
 
     public SaeOutboxWorker(
-        ISaeOutboxRepository repo,
-        SaeRuntime runtime,
+        IServiceScopeFactory scopeFactory,
         IConnectivityService connectivity,
         ILogger<SaeOutboxWorker> logger)
     {
-        _repo = repo;
-        _runtime = runtime;
+        _scopeFactory = scopeFactory;
         _connectivity = connectivity;
         _logger = logger;
     }
@@ -37,7 +35,12 @@ public class SaeOutboxWorker : BackgroundService
 
             try
             {
-                var batch = await _repo.GetBatchAsync(20);
+                List<SaeOutboxMessage> batch;
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var repo = scope.ServiceProvider.GetRequiredService<ISaeOutboxRepository>();
+                    batch = await repo.GetBatchAsync(20);
+                }
 
                 if (!batch.Any())
                 {
@@ -60,9 +63,13 @@ public class SaeOutboxWorker : BackgroundService
 
     private async Task ProcessMessageAsync(SaeOutboxMessage msg, CancellationToken ct)
     {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ISaeOutboxRepository>();
+        var runtime = scope.ServiceProvider.GetRequiredService<SaeRuntime>();
+
         try
         {
-            await _repo.MarkProcessingAsync(msg.Id);
+            await repo.MarkProcessingAsync(msg.Id);
 
             _logger.LogDebug("🔁 Reintentando mensaje {Id}: {Method} {Endpoint}", msg.Id, msg.Method, msg.Endpoint);
 
@@ -74,11 +81,11 @@ public class SaeOutboxWorker : BackgroundService
             // 🔥 IDEMPOTENCY HEADER
             request.Headers.Add("X-Idempotency-Key", msg.IdempotencyKey);
 
-            var response = await _runtime.SendRawAsync(request);
+            var response = await runtime.SendRawAsync(request);
 
             if (response.IsSuccessStatusCode)
             {
-                await _repo.MarkAsSentAsync(msg.Id);
+                await repo.MarkAsSentAsync(msg.Id);
                 _logger.LogInformation("✅ Mensaje {Id} sincronizado exitosamente.", msg.Id);
             }
             else
@@ -94,13 +101,13 @@ public class SaeOutboxWorker : BackgroundService
             if (msg.RetryCount > 10)
             {
                 _logger.LogError("💀 Mensaje {Id} alcanzó límite de reintentos. Marcando como DEAD. Error: {Error}", msg.Id, ex.Message);
-                await _repo.MarkAsDeadAsync(msg.Id, ex.Message);
+                await repo.MarkAsDeadAsync(msg.Id, ex.Message);
             }
             else
             {
                 msg.NextAttemptAt = BackoffStrategy.CalculateNext(msg.RetryCount);
                 msg.LastError = ex.Message;
-                await _repo.UpdateRetryAsync(msg);
+                await repo.UpdateRetryAsync(msg);
                 _logger.LogWarning("⚠️ Fallo replay {Id} (intento {Retry}): {Error}", msg.Id, msg.RetryCount, ex.Message);
             }
         }
