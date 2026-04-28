@@ -98,6 +98,7 @@ public class LicenseValidationResult
     public string? TerminalName { get; set; }
     public string? TerminalCode { get; set; }
     public string? BranchCode { get; set; }
+    public string? PaymentStatus { get; set; }
 }
 
 /// <summary>
