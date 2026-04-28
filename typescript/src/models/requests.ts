@@ -338,6 +338,27 @@ export interface UpdateSequenceRequest {
 
 // --- AUTH ---
 
+export interface LoginContext {
+    email?: string;
+    ipAddress?: string;
+    deviceId?: string;
+    userAgent?: string;
+    fingerprint?: string;
+    country?: string;
+    latitude?: number;
+    longitude?: number;
+}
+
+export interface LoginInitRequest {
+    email: string;
+}
+
+export interface MfaVerifyRequest {
+    userId: string;
+    sessionId: string;
+    mfaCode: string;
+}
+
 export interface LoginRequest {
     username: string;
     password?: string;

@@ -8,12 +8,17 @@ import {
 // --- AUTH ---
 
 export interface LoginResult {
-    token: string;
+    status: string; // Authenticated, RequiresMfa, RequiresPasskey, RequiresSetup, Error
+    token?: string;
+    accessToken?: string;
     refreshToken?: string;
     tenantId?: string;
-    requiresActivation?: boolean;
-    requiresSetup?: boolean;
-    requiresMfa?: boolean;
+    userId?: string;
+    sessionId?: string;
+    next?: {
+        type: string;
+        data?: any;
+    };
     expiresIn?: number;
     message?: string;
 }

@@ -142,21 +142,24 @@ export const DevelopmentDefaults: Required<Pick<SaeClientOptions,
  * Excepción específica para errores del cliente SAE.
  */
 export class SaeClientError extends Error {
-    /**
-     * Número de intentos realizados antes de fallar.
-     */
     readonly retryCount: number;
-
-    /**
-     * Código de error HTTP si aplica.
-     */
     readonly statusCode?: number;
+    readonly data?: any;
 
-    constructor(message: string, retryCount: number = 0, statusCode?: number) {
+    constructor(message: string, statusCode?: number, data?: any, retryCount: number = 0) {
         super(message);
         this.name = 'SaeClientError';
-        this.retryCount = retryCount;
         this.statusCode = statusCode;
+        this.data = data;
+        this.retryCount = retryCount;
+
+        // Intentar extraer un mensaje más específico de la data si existe
+        if (data) {
+            const possibleMessage = data.message || data.Message || data.error || data.ErrorMessage || data.mensaje;
+            if (possibleMessage && typeof possibleMessage === 'string') {
+                this.message = possibleMessage;
+            }
+        }
     }
 }
 

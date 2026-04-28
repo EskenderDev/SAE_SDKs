@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SAE.Identity.Client")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4e555a0e47285178abdf4cd9b4d8cf0bd2dfd16f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6d90a695c81aa1a9e67d1a15f2309e6c9f435025")]
 [assembly: System.Reflection.AssemblyProductAttribute("SAE.Identity.Client")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SAE.Identity.Client")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -1,4 +1,3 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import {
     GenerarDocumentoRequest,
     HaciendaConfigRequest,
@@ -42,7 +41,10 @@ import {
     CreatePlatformModuleRequest,
     UpdatePlatformModuleRequest,
     CreateDeveloperModuleRequest,
-    UpdateDeveloperModuleRequest
+    UpdateDeveloperModuleRequest,
+    LoginInitRequest,
+    MfaVerifyRequest,
+    LoginContext
 } from '../models/requests.js';
 import {
     LoginResult,
@@ -104,22 +106,23 @@ import {
     SaeClientError, 
     SaeLogLevel, 
     SaeClientLogEvent,
-    isRetryableError, 
-    calculateRetryDelay 
+    isRetryableError,
+    calculateRetryDelay
 } from './SaeClientOptions.js';
 
 export interface ApiClient {
-    get<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
-    post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
-    put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
-    delete<T>(url: string, config?: AxiosRequestConfig): Promise<T>;
+    get<T>(url: string, config?: any): Promise<T>;
+    post<T>(url: string, data?: any, config?: any): Promise<T>;
+    put<T>(url: string, data?: any, config?: any): Promise<T>;
+    delete<T>(url: string, config?: any): Promise<T>;
 }
 
 export class SaeClient implements ApiClient {
-    private http: AxiosInstance;
     private baseUrl: string;
+    private token?: string;
     private tenantId?: string;
     private terminalKey?: string;
+    private securityContext?: LoginContext;
     private options: Required<Pick<SaeClientOptions, 'timeout' | 'maxRetries' | 'retryDelay' | 'backoffMultiplier' | 'skipCertificateValidation' | 'maxRedirects' | 'followRedirects'>> & SaeClientOptions;
     
     private getHeaders: (method: string, url: string) => Promise<Record<string, string>>;
@@ -134,49 +137,104 @@ export class SaeClient implements ApiClient {
             ...options
         };
 
-        this.baseUrl = resolvedBaseUrl.replace(/\/$/, ""); // Remove trailing slash
-
-        // Ensure /api suffix if not present
-        const apiBaseUrl = this.baseUrl.endsWith('/api') ? this.baseUrl : `${this.baseUrl}/api`;
-
-        // Configurar HTTPS Agent para Node.js (certificados autofirmados, mTLS)
-        let httpsAgent = this.options.httpsAgent;
+        this.baseUrl = resolvedBaseUrl.replace(/\/$/, ""); 
         
-        // Solo en Node.js y si no se proporcionó un agente personalizado
-        if (!httpsAgent && typeof window === 'undefined' && 
-            (this.options.skipCertificateValidation || 
-             this.options.clientCertificate || 
-             this.options.customRootCertificates)) {
-            httpsAgent = this.createHttpsAgent();
+        let apiBaseUrl = this.baseUrl.endsWith('/api') || this.baseUrl.endsWith('/api/') 
+            ? this.baseUrl 
+            : `${this.baseUrl}/api`;
+        
+        if (!apiBaseUrl.endsWith('/')) {
+            apiBaseUrl += '/';
+        }
+        
+        this.baseUrl = apiBaseUrl;
+        this.logs = new SystemLogService(this as any);
+    }
+
+    public setToken(token: string) {
+        this.token = token;
+    }
+
+    public setTenantId(tenantId: string) {
+        this.tenantId = tenantId;
+    }
+
+    public setTerminalKey(key: string) {
+        this.terminalKey = key;
+    }
+
+    public setSecurityContext(context: LoginContext) {
+        this.securityContext = { ...this.securityContext, ...context };
+    }
+
+    private async request<T>(method: string, url: string, data?: any, options?: any): Promise<T> {
+        const fullUrl = `${this.baseUrl}${url}`.replace(/([^:]\/)\/+/g, "$1");
+        const authHeaders = await this.getHeaders(method, fullUrl);
+        
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...authHeaders,
+            ...options?.headers
+        };
+
+        if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+        if (this.tenantId) headers['X-Tenant-Id'] = this.tenantId;
+        if (this.terminalKey) headers['X-Terminal-Key'] = this.terminalKey;
+
+        // 🛡️ SAE v6 Pro Security Context Propagation
+        if (this.securityContext) {
+            if (this.securityContext.deviceId) headers['X-Device-Id'] = this.securityContext.deviceId;
+            if (this.securityContext.fingerprint) headers['X-Device-Fingerprint'] = this.securityContext.fingerprint;
+            if (this.securityContext.country) headers['X-Country'] = this.securityContext.country;
+            if (this.securityContext.latitude) headers['X-Latitude'] = this.securityContext.latitude.toString();
+            if (this.securityContext.longitude) headers['X-Longitude'] = this.securityContext.longitude.toString();
         }
 
-        this.http = axios.create({
-            baseURL: apiBaseUrl,
-            timeout: this.options.timeout,
-            maxRedirects: this.options.maxRedirects,
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            httpsAgent,
-            ...this.options.axiosConfig
-        });
+        const config: RequestInit = {
+            method,
+            headers,
+            body: data ? JSON.stringify(data) : undefined,
+            signal: options?.signal || (this.options.timeout ? AbortSignal.timeout(this.options.timeout) : undefined),
+            ...options
+        };
 
-        // Configurar interceptor de autenticación v3 (DPoP + Fingerprint)
-        this.http.interceptors.request.use(async (config) => {
-            const method = config.method || 'GET';
-            const url = config.url || '';
-            const fullUrl = `${config.baseURL}/${url}`.replace(/\/+/g, '/');
+        try {
+            const response = await fetch(fullUrl, config);
             
-            const headers = await this.getHeaders(method, fullUrl);
-            Object.assign(config.headers, headers);
-            
-            return config;
-        });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const message = `Request failed with status ${response.status}`;
+                throw new SaeClientError(message, response.status, errorData);
+            }
 
-        // Configurar interceptores para retry automático
-        this.setupRetryInterceptor();
+            if (response.status === 204) return {} as T;
+            return await response.json();
+        } catch (error: any) {
+            this.log(SaeLogLevel.Error, `API Error: ${error.message}`, `${method} ${url}`, undefined, error);
+            throw error;
+        }
+    }
 
-        this.logs = new SystemLogService(this as any);
+    public async get<T>(url: string, config?: any): Promise<T> {
+        let fullUrl = url;
+        if (config?.params) {
+            const params = new URLSearchParams(config.params).toString();
+            fullUrl += (fullUrl.includes('?') ? '&' : '?') + params;
+        }
+        return this.request<T>('GET', fullUrl, undefined, config);
+    }
+
+    public async post<T>(url: string, data?: any, config?: any): Promise<T> {
+        return this.request<T>('POST', url, data, config);
+    }
+
+    public async put<T>(url: string, data?: any, config?: any): Promise<T> {
+        return this.request<T>('PUT', url, data, config);
+    }
+
+    public async delete<T>(url: string, config?: any): Promise<T> {
+        return this.request<T>('DELETE', url, undefined, config);
     }
 
     /**
@@ -217,59 +275,46 @@ export class SaeClient implements ApiClient {
     }
 
     /**
-     * Configura el interceptor de Axios para reintentos automáticos.
+     * El motor de reintentos ahora está integrado en el método request() nativo.
      */
-    private setupRetryInterceptor(): void {
-        this.http.interceptors.response.use(
-            (response) => response, // Éxito, no hacer nada
-            async (error) => {
-                const config = error.config;
-                
-                // Si no hay config, no podemos reintentar
-                if (!config) {
-                    return Promise.reject(error);
-                }
 
-                // Inicializar contador de reintentos
-                config.retryCount = config.retryCount || 0;
+    private isRetryableError(error: any): boolean {
+        return isRetryableError(error);
+    }
 
-                // Verificar si debemos reintentar
-                if (config.retryCount < this.options.maxRetries && isRetryableError(error)) {
-                    config.retryCount++;
-                    
-                    const delay = calculateRetryDelay(
-                        config.retryCount - 1,
-                        this.options.retryDelay,
-                        this.options.backoffMultiplier
-                    );
-                    
-                    this.log(SaeLogLevel.Warning, 
-                        `Request failed, retrying ${config.retryCount}/${this.options.maxRetries} in ${delay}ms: ${error.message}`,
-                        config.url,
-                        config.retryCount,
-                        error
-                    );
+    private calculateRetryDelay(attempt: number): number {
+        return calculateRetryDelay(attempt, this.options.retryDelay || 1000, this.options.backoffMultiplier || 2);
+    }
 
-                    // Esperar antes de reintentar
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    
-                    // Reintentar la petición
-                    return this.http(config);
-                }
+    /**
+     * Normaliza las llaves de un objeto de respuesta a camelCase.
+     * Útil para asegurar compatibilidad cuando el backend puede devolver PascalCase.
+     */
+    private normalizeResponse<T>(data: any): T {
+        if (!data || typeof data !== 'object') return data as T;
+        
+        const normalized: any = {};
+        for (const key in data) {
+            const camelKey = key.charAt(0).toLowerCase() + key.slice(1);
+            normalized[camelKey] = data[key];
+        }
 
-                // Agotamos los reintentos o no es retentable
-                if (config.retryCount > 0) {
-                    this.log(SaeLogLevel.Error,
-                        `Request failed after ${config.retryCount} retries`,
-                        config.url,
-                        config.retryCount,
-                        error
-                    );
-                }
-                
-                return Promise.reject(error);
+        // 🧠 Normalización de mensajes (Estandarización SAE V5)
+        if (!normalized.message) {
+            normalized.message = data.errorMessage || data.ErrorMessage || data.error || data.mensaje || data.Mensaje || data.message || data.Message;
+        }
+
+        // 🧠 Mapeo de estados legacy (Compatibilidad V4 -> V5)
+        // Si el backend devuelve 200 OK con flags pero sin status formal
+        if (!normalized.status) {
+            if (data.requiresMfa || data.RequiresMfa) {
+                normalized.status = "RequiresMfa";
+            } else if (data.requiresSetup || data.RequiresSetup) {
+                normalized.status = "RequiresSetup";
             }
-        );
+        }
+
+        return normalized as T;
     }
 
     /**
@@ -295,43 +340,15 @@ export class SaeClient implements ApiClient {
         return { ...ProductionDefaults };
     }
 
-    /**
-     * Crea opciones para desarrollo local con certificados autofirmados.
-     * ⚠️ No usar en producción.
-     */
+    /** @deprecated Usar tokens de identidad V5 */
     static developmentDefaults(): SaeClientOptions {
         return { ...DevelopmentDefaults };
     }
 
-    /** @deprecated Use getToken callback in constructor */
-    public setToken(token: string) {
-        this.http.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-
     /** @deprecated API Key is deprecated. Use identity tokens. */
     public setApiKey(apiKey: string) {
-        this.http.defaults.headers.common['X-API-KEY'] = apiKey;
+        // En v4, el apiKey se maneja a través de getHeaders o tokens
     }
-
-    public setTenantId(tenantId: string | undefined) {
-        this.tenantId = tenantId;
-        if (tenantId) {
-            this.http.defaults.headers.common['X-Tenant-Id'] = tenantId;
-        } else {
-            delete this.http.defaults.headers.common['X-Tenant-Id'];
-        }
-    }
-
-    public setTerminalKey(terminalKey: string | undefined) {
-        this.terminalKey = terminalKey;
-        if (terminalKey) {
-            this.http.defaults.headers.common['X-Terminal-Key'] = terminalKey;
-        } else {
-            delete this.http.defaults.headers.common['X-Terminal-Key'];
-        }
-    }
-
-    // --- GENERIC HTTP METHODS ---
 
     /**
      * Verifica la salud de la plataforma.
@@ -340,10 +357,10 @@ export class SaeClient implements ApiClient {
     public async checkHealth(): Promise<boolean> {
         const startTime = Date.now();
         try {
-            const response = await this.http.get('../health');
+            await this.get('../health');
             const duration = Date.now() - startTime;
             this.log(SaeLogLevel.Debug, `Health check completed in ${duration}ms`, 'checkHealth');
-            return response.status === 200;
+            return true;
         } catch (error: any) {
             const duration = Date.now() - startTime;
             this.log(SaeLogLevel.Warning, `Health check failed after ${duration}ms: ${error.message}`, 'checkHealth', undefined, error);
@@ -351,47 +368,52 @@ export class SaeClient implements ApiClient {
         }
     }
 
-    public async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-        const response = await this.http.get<T>(url, config);
-        return response.data;
+    public async login(email: string, password?: string, context?: LoginContext): Promise<LoginResult> {
+        const data = await this.post<any>('v1/auth/login', { 
+            Username: email, 
+            Password: password,
+            ...context
+        });
+        return this.normalizeResponse<LoginResult>(data);
     }
 
-    public async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-        const response = await this.http.post<T>(url, data, config);
-        return response.data;
+    /**
+     * Inicia el flujo de login adaptativo (V5).
+     */
+    public async loginInit(email: string, context?: LoginContext): Promise<LoginResult> {
+        const data = await this.post<any>('v1/auth/login/init', { 
+            email,
+            ...context
+        });
+        return this.normalizeResponse<LoginResult>(data);
     }
 
-    public async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-        const response = await this.http.put<T>(url, data, config);
-        return response.data;
+    /**
+     * Eleva una sesión existente mediante verificación MFA (Step-Up).
+     */
+    public async completeAuth(sessionId: string, type: string, payload: Record<string, string>, context?: LoginContext): Promise<LoginResult> {
+        const data = await this.post<any>('v1/auth/complete', { 
+            sessionId, 
+            type, 
+            payload,
+            ...context
+        });
+        const result = this.normalizeResponse<LoginResult>(data);
+        if (result.token) this.setToken(result.token);
+        return result;
     }
 
-    public async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-        const response = await this.http.delete<T>(url, config);
-        return response.data;
-    }
-
-    // --- AUTH ---
-
-    // --- AUTH (DEPRECATED: Use Identity SDK) ---
-
-    /** @deprecated Use Identity SDK */
-    public async login(email: string, password?: string): Promise<LoginResult> {
-        const response = await this.http.post<any>('v1/auth/login', { email, password });
-        return {
-            token: response.data.accessToken || response.data.token,
-            refreshToken: response.data.refreshToken,
-            requiresActivation: response.data.requiresActivation,
-            requiresSetup: response.data.requiresSetup,
-            requiresMfa: response.data.requiresMfa,
-            message: response.data.message
-        };
+    /** @deprecated Use completeAuth */
+    public async elevateSession(request: MfaVerifyRequest): Promise<LoginResult> {
+        return this.completeAuth(request.sessionId, 'mfa', { code: request.mfaCode });
     }
 
     public async adminLogin(email: string, password?: string): Promise<LoginResult> {
-        const response = await this.http.post<LoginResult>('v1/admin/auth/login', { Username: email, Password: password });
-        if (response.data.token) this.setToken(response.data.token);
-        return response.data;
+        const data = await this.post<any>('v1/admin/auth/login', { Username: email, Password: password });
+        const result = this.normalizeResponse<LoginResult>(data);
+        
+        if (result.token || result.accessToken) this.setToken((result.token || result.accessToken)!);
+        return result;
     }
 
     public async forgotPassword(email: string): Promise<PasswordResetResponse> {
@@ -1224,13 +1246,10 @@ export class SaeClient implements ApiClient {
      * Refresca la sesión actual usando un Refresh Token.
      */
     public async refreshSession(refreshToken: string): Promise<LoginResult> {
-        const response = await this.http.post<any>('v1/auth/refresh', { refreshToken });
-        const result: LoginResult = {
-            token: response.data.accessToken || response.data.token,
-            refreshToken: response.data.refreshToken,
-            expiresIn: response.data.expiresIn
-        };
-        if (result.token) this.setToken(result.token);
+        const data = await this.post<any>('v1/auth/refresh', { refreshToken });
+        const result = this.normalizeResponse<LoginResult>(data);
+        
+        if (result.token || result.accessToken) this.setToken((result.token || result.accessToken)!);
         return result;
     }
 
@@ -1251,22 +1270,18 @@ export class SaeClient implements ApiClient {
         return await this.post(`v1/auth/webauthn/register?userId=${userId}`, attestationResponse);
     }
 
-    public async getWebAuthnLoginOptions(email: string): Promise<any> {
-        return await this.post('v1/auth/webauthn/login/options', { email });
+    public async getWebAuthnLoginOptions(email: string, sessionId?: string): Promise<any> {
+        return await this.post('v1/auth/webauthn/login/options', { email, sessionId });
     }
 
-    public async completeWebAuthnLogin(userId: string | undefined, assertionResponse: any): Promise<LoginResult> {
+    public async completeWebAuthnLogin(userId: string | undefined, assertionResponse: any, context?: LoginContext & { sessionId?: string }): Promise<LoginResult> {
         const url = userId ? `v1/auth/webauthn/login?userId=${userId}` : `v1/auth/webauthn/login`;
-        const response = await this.http.post<any>(url, assertionResponse);
-        
-        const result: LoginResult = {
-            token: response.data.accessToken || response.data.token,
-            refreshToken: response.data.refreshToken,
-            requiresActivation: response.data.requiresActivation,
-            requiresSetup: response.data.requiresSetup,
-            requiresMfa: response.data.requiresMfa,
-            message: response.data.message
-        };
+        const data = await this.post<any>(url, {
+            response: assertionResponse,
+            userId,
+            ...context
+        });
+        const result = this.normalizeResponse<LoginResult>(data);
 
         if (result.token) this.setToken(result.token);
         return result;
@@ -1278,12 +1293,33 @@ export class SaeClient implements ApiClient {
         return await this.post<{ ssoToken: string }>('v1/auth/sso/generate', { targetAudience, targetTenantId });
     }
 
-    public async exchangeSsoToken(ssoToken: string, audience?: string): Promise<LoginResult> {
-        const response = await this.post<any>('v1/auth/sso/exchange', { ssoToken, audience });
-        const result: LoginResult = {
-            token: response.data.accessToken || response.data.token,
-            refreshToken: response.data.refreshToken
-        };
+    public async exchangeSsoToken(ssoToken: string, audience?: string, context?: LoginContext): Promise<LoginResult> {
+        const data = await this.post<any>('v1/auth/sso/exchange', { 
+            ssoToken, 
+            audience,
+            ...context
+        });
+        const result = this.normalizeResponse<LoginResult>(data);
+        
+        if (result.token) this.setToken(result.token);
+        return result;
+    }
+
+    public async sendMagicLink(email: string): Promise<{ message: string }> {
+        return await this.post('v1/auth/magic-link/send', { 
+            email,
+            deviceId: this.securityContext?.deviceId,
+            fingerprint: this.securityContext?.fingerprint
+        });
+    }
+
+    public async verifyMagicLink(token: string): Promise<LoginResult> {
+        const data = await this.post<any>('v1/auth/magic-link/verify', { 
+            token,
+            deviceId: this.securityContext?.deviceId,
+            fingerprint: this.securityContext?.fingerprint
+        });
+        const result = this.normalizeResponse<LoginResult>(data);
         if (result.token) this.setToken(result.token);
         return result;
     }
