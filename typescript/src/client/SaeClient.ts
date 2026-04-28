@@ -151,15 +151,15 @@ export class SaeClient implements ApiClient {
         this.logs = new SystemLogService(this as any);
     }
 
-    public setToken(token: string) {
+    public setToken(token: string | undefined) {
         this.token = token;
     }
 
-    public setTenantId(tenantId: string) {
+    public setTenantId(tenantId: string | undefined) {
         this.tenantId = tenantId;
     }
 
-    public setTerminalKey(key: string) {
+    public setTerminalKey(key: string | undefined) {
         this.terminalKey = key;
     }
 
